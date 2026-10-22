@@ -7,14 +7,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="مترجم الأفلام">
+<meta name="apple-mobile-web-app-title" content="فهّمني">
+<meta name="application-name" content="فهّمني">
+<meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="/icon-192.png">
-<title>مترجم الأفلام</title>
+<title>فهّمني 🍿</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=Reem+Kufi:wght@600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=Reem+Kufi:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#0d0b09; --surface:#17140f; --surface2:#211c15; --line:#2f2820;
@@ -22,13 +24,53 @@
   --danger:#ff7a6b; --heart:#ff5a6e;
   --sub-size:12px;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+html{background:var(--bg);overscroll-behavior:none;-webkit-text-size-adjust:100%}
+button,a,.chips button,input{touch-action:manipulation}
+button,.ibtn,.chips button,.seg button,.fav .open,.snap,.go,.btn2{transition:transform .12s ease,opacity .12s ease,background-color .2s}
+button:active,.ibtn:active,.snap:active,.fav .open:active,.go:active,.btn2:active{transform:scale(.96);opacity:.85}
+
+/* الاسم */
+.brand{font-family:"Reem Kufi",sans-serif;font-weight:700;letter-spacing:0;line-height:1.1;
+  background:linear-gradient(180deg,#f6d38b,#e0a84a 55%,#c4862c);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1.brand{font-size:30px}
+.brand.small{font-size:20px}
+.brand.xl{font-size:46px;margin-top:14px}
+
+/* شاشة الافتتاح */
+.splash{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity .45s ease,visibility .45s;padding-bottom:6vh}
+.splash.out{opacity:0;visibility:hidden}
+.splash .logo.big{width:84px;height:84px;border-radius:22px;animation:pop .6s cubic-bezier(.2,1.4,.4,1) both}
+.splash .logo.big svg{width:46px;height:46px}
+.splash .brand,.splash .tag{animation:rise .6s .12s ease both}
+.splash .tag{color:var(--muted);margin-top:8px;font-size:15px}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+@keyframes rise{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+
+/* شريط علوي يصير شفاف ومغبّش وقت التمرير */
+header#topbar{position:sticky;top:0;z-index:20;margin:0 -16px 18px;padding:max(10px,env(safe-area-inset-top)) 16px 10px;transition:background .25s,border-color .25s;border-bottom:1px solid transparent}
+header#topbar.scrolled{background:rgba(13,11,9,.72);backdrop-filter:saturate(1.6) blur(18px);-webkit-backdrop-filter:saturate(1.6) blur(18px);border-bottom-color:var(--line)}
+.watchbar{display:none;align-items:center;justify-content:space-between;margin:0 0 12px}
+body.watching .watchbar{display:flex}
+body.watching{padding-top:max(12px,env(safe-area-inset-top))}
+body.watching .home-only{display:none!important}
+.back{display:inline-flex;align-items:center;gap:2px;border:0;background:none;color:var(--accent);font:inherit;font-size:16px;font-weight:500;padding:6px 2px}
+.back svg{width:22px;height:22px}
+
+/* انتقالات الشاشات */
+.screen-in{animation:screenIn .32s cubic-bezier(.2,.8,.2,1) both}
+.screen-back{animation:screenBack .32s cubic-bezier(.2,.8,.2,1) both}
+@keyframes screenIn{from{transform:translateX(-28px);opacity:0}to{transform:none;opacity:1}}
+@keyframes screenBack{from{transform:translateX(28px);opacity:0}to{transform:none;opacity:1}}
+#watch.dragging{transition:none}
+#watch.release{transition:transform .25s ease,opacity .25s ease}
 html,body{margin:0;background:var(--bg);color:var(--text)}
-body{font-family:"IBM Plex Sans Arabic",system-ui,sans-serif;min-height:100dvh;
-  padding:max(16px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom));-webkit-user-select:none;user-select:none}
+body{font-family:"IBM Plex Sans Arabic",system-ui,sans-serif;min-height:100dvh;overscroll-behavior-y:none;
+  padding:0 16px max(24px,env(safe-area-inset-bottom));-webkit-user-select:none;user-select:none}
 input{-webkit-user-select:text;user-select:text}
 .wrap{max-width:720px;margin:0 auto}
-header{display:flex;align-items:center;gap:10px;margin:4px 0 18px}
+header{display:flex;align-items:center;gap:12px}
 .logo{width:38px;height:38px;border-radius:10px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink)}
 h1{font-family:"Reem Kufi",sans-serif;font-size:24px;margin:0;letter-spacing:0}
 header p{margin:0;color:var(--muted);font-size:13px}
@@ -139,7 +181,7 @@ input[type=url]{direction:ltr;text-align:left}
 
 /* ───────── وضع السينما ───────── */
 body.cinema{padding:0;overflow:hidden;background:#000;overscroll-behavior:none}
-body.cinema .wrap>*:not(#watch){display:none}
+body.cinema .wrap>*:not(#watch){display:none!important}
 body.cinema #watch>*:not(.stage){display:none}
 body.cinema .stage{position:fixed;inset:0;width:100vw;height:100dvh;border-radius:0;aspect-ratio:auto;z-index:50}
 @media (orientation:portrait){
@@ -196,19 +238,32 @@ body.cinema .not-cinema{display:none!important}
 </style>
 </head>
 <body>
+<div class="splash" id="splash" aria-hidden="true">
+  <div class="logo big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M6 15h4M13 15h5M6 11h8M16 11h2"/></svg></div>
+  <div class="brand xl">فهّمني</div>
+  <div class="tag">نفهّمك أي فلم بلهجتك 🍿</div>
+</div>
 <div class="wrap">
-  <header>
+  <header class="home-only" id="topbar">
     <div class="logo" aria-hidden="true">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M6 15h4M13 15h5M6 11h8M16 11h2"/></svg>
     </div>
     <div>
-      <h1>مترجم الأفلام</h1>
-      <p>الصق رابط فلم أو مقطع واختر لهجتك 🎬</p>
+      <h1 class="brand">فهّمني</h1>
+      <p>أي فلم أو مقطع… نفهّمك إياه بلهجتك 🍿</p>
     </div>
   </header>
 
+  <div class="watchbar" id="watchbar">
+    <button class="back" id="backBtn" type="button" aria-label="رجوع">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      رجوع
+    </button>
+    <span class="brand small">فهّمني</span>
+  </div>
+
   <!-- إرشاد: إضافة الأداة للشاشة الرئيسية -->
-  <section class="card tip hidden" id="installTip">
+  <section class="home-only card tip hidden" id="installTip">
     <button class="x" type="button" data-close="installTip" aria-label="إغلاق">×</button>
     <h3>حوّل الأداة لتطبيق على جوالك 📲</h3>
     <ol>
@@ -221,7 +276,7 @@ body.cinema .not-cinema{display:none!important}
   </section>
 
   <!-- إرشاد: تفعيل الإشعارات -->
-  <section class="card tip hidden" id="pushTip">
+  <section class="home-only card tip hidden" id="pushTip">
     <button class="x" type="button" data-close="pushTip" aria-label="إغلاق">×</button>
     <h3>تبي نعلمك أول ما يجهز فلمك؟ 🔔</h3>
     <p class="note" style="margin:0 0 12px">فعّل التنبيهات، وتقدر تطلع من الأداة وتسوي أشغالك براحتك، وإذا جهز الفلم يوصلك إشعار 🍿</p>
@@ -229,7 +284,7 @@ body.cinema .not-cinema{display:none!important}
     <p class="note err hidden" id="pushErr"></p>
   </section>
 
-  <form id="form" class="card" autocomplete="off">
+  <form id="form" class="home-only card" autocomplete="off">
     <label class="t" for="url">رابط الفلم من يوتيوب 🎬</label>
     <input id="url" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…">
     <label class="t" for="clipUrl" style="margin-top:12px">رابط المقطع من السوشل 📱</label>
@@ -255,7 +310,7 @@ body.cinema .not-cinema{display:none!important}
     <p class="note err hidden" id="formErr"></p>
   </form>
 
-  <section class="card favs" id="favBox">
+  <section class="home-only card favs" id="favBox">
     <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 4.3 2.4h2c.7-1.3 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg> المحفوظة</h2>
     <div id="favList"><p class="empty">…</p></div>
     <details class="move"><summary>🔁 انقل محفوظتك لجوال أو متصفح ثاني</summary>
@@ -265,7 +320,7 @@ body.cinema .not-cinema{display:none!important}
     </details>
   </section>
 
-  <a class="card snap" id="snapBox" href="https://snapchat.com/t/T4QBeB0D" target="_blank" rel="noopener">
+  <a class="home-only card snap" id="snapBox" href="https://snapchat.com/t/T4QBeB0D" target="_blank" rel="noopener">
     <span class="ghost" aria-hidden="true">👻</span>
     <span><b>تحتاج مساعدة؟</b><br><small>كلمني على سناب، حياك 🤍</small></span>
     <span class="go2" aria-hidden="true">‹</span>
@@ -489,6 +544,27 @@ body.cinema .not-cinema{display:none!important}
       }
     }
   }
+  function showWatch(push) {
+    const wasHome = !document.body.classList.contains("watching");
+    document.body.classList.add("watching");
+    $("#watch").classList.remove("hidden");
+    if (wasHome) { animate($("#watch"), "screen-in"); if (push) history.pushState({ w: 1 }, "", location.href); }
+  }
+  function animate(el, cls) { el.classList.remove("screen-in", "screen-back"); void el.offsetWidth; el.classList.add(cls); }
+  async function goHome(fromPop) {
+    if (!document.body.classList.contains("watching")) return;
+    await savePosition();
+    clearTimeout(pollTimer); edgeMode = false; job = null; try { player?.stopVideo?.(); player?.pauseVideo?.(); } catch {}
+    setCinema(false); closeSheet();
+    document.body.classList.remove("watching", "vert");
+    $("#watch").classList.add("hidden");
+    $("#url").value = ""; $("#clipUrl").value = ""; $("#subs").innerHTML = ""; document.title = "فهّمني 🍿";
+    history.replaceState(null, "", "/"); loadFavs();
+    animate(document.querySelector(".wrap"), "screen-back"); window.scrollTo({ top: 0 });
+    if (!fromPop && history.state?.w) history.back();
+  }
+  window.addEventListener("popstate", () => { if (document.body.classList.contains("watching")) goHome(true); });
+
   function openJob(id, vid, resumeAt, vertHint, platform = "youtube", kind = "movie", url = "") {
     job = { id, vid, platform, kind, url: url || (platform === "youtube" ? "https://youtu.be/" + vid : "") };
     resetSubs(); title = ""; duration = 0; readyDialects = [];
@@ -499,16 +575,15 @@ body.cinema .not-cinema{display:none!important}
       const myJob = job; setTimeout(() => { if (job === myJob && lastStage) $("#stage-text").textContent = lastStage; }, 3600);
     }
     aspect = 0; setAspect(vertHint ? 9 / 16 : 16 / 9);
-    $("#form").classList.add("hidden"); $("#favBox").classList.add("hidden");
-    $("#installTip").classList.add("hidden"); $("#pushTip").classList.add("hidden");
-    $("#watch").classList.remove("hidden");
+
     $("#srtBtn").classList.add("hidden"); $("#ttl").textContent = "";
     setHeart(favs.some(f => f.key === favKey()));
     stage.classList.remove("started", "ended"); stage.classList.add("paused");
     loadVideo(vid, resumeAt); poll(); updateHint();
-    document.title = kind === "clip" ? "مترجم المقاطع" : "مترجم الأفلام";
+    document.title = kind === "clip" ? "فهّمني · مقطع 📱" : "فهّمني · فلم 🎬";
+    showWatch(true);
     window.scrollTo({ top: 0 });
-    history.replaceState(null, "", "/?job=" + id);
+    history.replaceState(history.state, "", "/?job=" + id);
   }
 
   // من رابط الإشعار
@@ -585,13 +660,37 @@ body.cinema .not-cinema{display:none!important}
     a.href = URL.createObjectURL(blob); a.download = (title || job.vid) + ".srt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   });
 
-  $("#newBtn").addEventListener("click", async () => {
-    await savePosition();
-    clearTimeout(pollTimer); job = null; try { player?.stopVideo(); } catch {}
-    setCinema(false); closeSheet();
-    $("#watch").classList.add("hidden"); $("#form").classList.remove("hidden"); $("#favBox").classList.remove("hidden");
-    $("#url").value = ""; $("#clipUrl").value = ""; $("#subs").innerHTML = ""; document.title = "مترجم الأفلام"; history.replaceState(null, "", "/"); loadFavs();
-  });
+  $("#newBtn").addEventListener("click", () => goHome());
+  $("#backBtn").addEventListener("click", () => goHome());
+
+  // سحب من طرف الشاشة اليمين للرجوع (مثل تطبيقات الآيفون العربية)
+  (() => {
+    let sx = 0, sy = 0, dragging = false, dx = 0;
+    const W = () => window.innerWidth, el = $("#watch");
+    document.addEventListener("touchstart", e => {
+      if (!document.body.classList.contains("watching") || document.body.classList.contains("cinema")) return;
+      const t = e.touches[0];
+      if (t.clientX > W() - 28) { sx = t.clientX; sy = t.clientY; dragging = true; dx = 0; el.classList.add("dragging"); }
+    }, { passive: true });
+    document.addEventListener("touchmove", e => {
+      if (!dragging) return;
+      const t = e.touches[0]; dx = Math.min(0, t.clientX - sx);
+      if (Math.abs(t.clientY - sy) > 60 && Math.abs(dx) < 30) { dragging = false; el.style.transform = ""; return; }
+      el.style.transform = `translateX(${dx}px)`; el.style.opacity = String(1 - Math.min(.6, -dx / W()));
+    }, { passive: true });
+    document.addEventListener("touchend", () => {
+      if (!dragging) return; dragging = false;
+      el.classList.remove("dragging"); el.classList.add("release");
+      if (-dx > Math.min(110, W() * .28)) { el.style.transform = `translateX(${-W()}px)`; el.style.opacity = "0"; setTimeout(() => { el.classList.remove("release"); el.style.transform = ""; el.style.opacity = ""; goHome(); }, 220); }
+      else { el.style.transform = ""; el.style.opacity = ""; setTimeout(() => el.classList.remove("release"), 260); }
+    });
+  })();
+
+  // الشريط العلوي يتغبّش وقت التمرير
+  window.addEventListener("scroll", () => $("#topbar").classList.toggle("scrolled", window.scrollY > 8), { passive: true });
+  // شاشة الافتتاح
+  window.addEventListener("load", () => setTimeout(() => $("#splash").classList.add("out"), standalone ? 650 : 250));
+  setTimeout(() => $("#splash").classList.add("out"), 2500);
 
   // ───── تبديل اللهجة وانت تتفرج (بدون ما يوقف الفلم)
   async function switchDialect(d) {
@@ -901,7 +1000,7 @@ body.cinema .not-cinema{display:none!important}
     errEl && errEl.classList.add("hidden");
     try {
       const perm = await Notification.requestPermission();
-      if (perm !== "granted") throw new Error("ما سمحت بالتنبيهات 😅 تقدر تفعّلها من إعدادات الآيفون ← مترجم الأفلام ← الإشعارات");
+      if (perm !== "granted") throw new Error("ما سمحت بالتنبيهات 😅 تقدر تفعّلها من إعدادات الآيفون ← فهّمني ← الإشعارات");
       const reg = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
       const kr = await api("/api/push/key"); const { key } = await kr.json();

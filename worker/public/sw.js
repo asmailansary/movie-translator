@@ -4,8 +4,8 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (e) => {
   let d = {};
-  try { d = e.data ? e.data.json() : {}; } catch { d = { title: "مترجم الأفلام", body: e.data ? e.data.text() : "" }; }
-  e.waitUntil(self.registration.showNotification(d.title || "مترجم الأفلام", {
+  try { d = e.data ? e.data.json() : {}; } catch { d = { title: "فهّمني", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "فهّمني", {
     body: d.body || "",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
