@@ -27,7 +27,7 @@
 |---|---|
 | `worker/src/index.js` | كود Cloudflare Worker |
 | `worker/public/index.html` | الصفحة اللي تشوفها |
-| `worker/wrangler.toml` | إعدادات Cloudflare |
+| `wrangler.toml` | إعدادات Cloudflare |
 | `pipeline/translate.py` | التحميل والتفريغ والترجمة |
 | `.github/workflows/translate.yml` | يشغّل `translate.py` على GitHub |
 
