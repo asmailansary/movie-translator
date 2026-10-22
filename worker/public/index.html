@@ -41,6 +41,8 @@ html[data-theme=light] .brand{background:linear-gradient(180deg,color-mix(in srg
 html[data-theme=light] .sheet .panel{background:#fffffff2}
 html[data-theme=light] .seg button[aria-pressed=true],html[data-theme=light] .go,html[data-theme=light] .btn2{box-shadow:0 2px 10px rgba(160,110,30,.18)}
 html[data-theme=light] .card{box-shadow:0 1px 2px rgba(60,40,10,.04),0 6px 20px rgba(60,40,10,.05)}
+.logo.custom{background:none;overflow:hidden}
+.logo img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
 .themeBtn{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;font-size:19px;flex:none;padding:0}
 .themeBtn span{display:block;transition:transform .5s cubic-bezier(.22,1.4,.36,1)}
 .themeBtn.spin span{transform:rotate(360deg) scale(1.1)}
@@ -509,6 +511,15 @@ body.cinema .not-cinema{display:none!important}
     document.querySelector('meta[name="apple-mobile-web-app-title"]').content = s.name;
     if (!document.body.classList.contains("watching")) document.title = s.name + " 🍿";
     const v = s.icon_v || 0;
+    // الشعار داخل التطبيق (فوق، وفي صفحة المشاهدة، وشاشة الافتتاح) = نفس أيقونة التطبيق
+    document.querySelectorAll(".logo").forEach(el => {
+      if (!el.dataset.svg) el.dataset.svg = el.innerHTML;
+      if (s.custom_icon) {
+        const src = (el.classList.contains("big") ? "/brand/icon-512.png?v=" : "/brand/icon-192.png?v=") + v;
+        if (el.querySelector("img")?.getAttribute("src") !== src) { const im = new Image(); im.alt = ""; im.src = src; im.decoding = "async"; el.replaceChildren(im); }
+        el.classList.add("custom");
+      } else if (el.classList.contains("custom")) { el.innerHTML = el.dataset.svg; el.classList.remove("custom"); }
+    });
     $("#touchIcon").href = "/brand/icon-180.png?v=" + v; $("#favIcon").href = "/brand/icon-192.png?v=" + v;
     $("#snapBox").href = s.snap_url || $("#snapBox").href;
     $("#snapBox").classList.toggle("hidden", s.show_snap === false);
@@ -547,7 +558,11 @@ body.cinema .not-cinema{display:none!important}
 
   api("/api/hello", { method: "POST", body: JSON.stringify({ app: standalone, push: pushOn() }) }).catch(() => {});
   if (S && S.name) setTimeout(() => applySettings(S), 0);
-  fetch("/api/settings").then(r => r.json()).then(s => applySettings(s)).catch(() => {});
+  let lastSettings = 0;
+  const refreshSettings = () => { lastSettings = Date.now(); fetch("/api/settings", { cache: "no-store" }).then(r => r.json()).then(s => applySettings(s)).catch(() => {}); };
+  refreshSettings();
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && Date.now() - lastSettings > 20000) refreshSettings(); });
+  window.addEventListener("pageshow", e => { if (e.persisted) refreshSettings(); });
   fetch("/api/config").then(r => r.json()).then(c => {
     cfg = c;
     renderChips(); renderRecent(); loadFavs().then(openFromUrl);

@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   tap_sound: true,          // صوت النقر
   accent: "#e0a84a",
   icon_v: 0,                // يزيد كل ما تغيّرت الأيقونة
+  custom_icon: false,       // فيه أيقونة مرفوعة من الأدمن؟
   snap_url: "https://snapchat.com/t/T4QBeB0D",
   show_social: true,
   show_dub: true,
@@ -194,7 +195,7 @@ export async function adminApi(request, env, ctx, action, safeEqual) {
       await env.BUCKET.put(`config/icon-${size}.png`, await f.arrayBuffer(), { httpMetadata: { contentType: "image/png" } });
     }
     const s = await getSettings(env);
-    const next = { ...s, icon_v: (s.icon_v || 0) + 1 };
+    const next = { ...s, icon_v: (s.icon_v || 0) + 1, custom_icon: true };
     await env.BUCKET.put(SETTINGS_KEY, JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
     cache = { at: 0, value: null };
     return json({ ok: true, icon_v: next.icon_v });
@@ -202,7 +203,7 @@ export async function adminApi(request, env, ctx, action, safeEqual) {
   if (action === "icon-reset" && request.method === "POST") {
     for (const size of ["180", "192", "512"]) await env.BUCKET.delete(`config/icon-${size}.png`);
     const s = await getSettings(env);
-    const next = { ...s, icon_v: (s.icon_v || 0) + 1 };
+    const next = { ...s, icon_v: (s.icon_v || 0) + 1, custom_icon: false };
     await env.BUCKET.put(SETTINGS_KEY, JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
     cache = { at: 0, value: null };
     return json({ ok: true });
