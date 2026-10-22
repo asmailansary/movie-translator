@@ -12,7 +12,7 @@
 
 import { getVapid, saveSub, removeSub, notifyAll, validSubscription } from "./push.js";
 import { WINDOW, systemPrompt, translateLines } from "./edge.js";
-import { adminApi, getSettings, publicSettings, serveIcon, serveManifest } from "./admin.js";
+import { adminApi, getSettings, publicSettings, serveIcon, serveManifest, serveTap } from "./admin.js";
 
 const LANGS = { auto: "تلقائي", en: "الإنجليزية", de: "الألمانية", fr: "الفرنسية" };
 const DIALECTS = {
@@ -636,7 +636,7 @@ async function pushApi(request, env, action) {
     return json({ ok: true });
   }
   if (action === "test") {
-    const n = await notifyAll(env, { title: "فهّمني 🍿", body: "تم وكذا بيوصلك خبر أول ما يجهز محتواك✨", url: "/" }, new URL(request.url).origin, [dev]);
+    const n = await notifyAll(env, { title: "", body: "تم وكذا بيوصلك خبر أول ما يجهز محتواك✨", url: "/" }, new URL(request.url).origin, [dev]);
     return json({ ok: true, sent: n });
   }
   return json({ error: "غير موجود" }, 404);
@@ -684,8 +684,9 @@ export default {
       m = path.match(/^\/api\/handoff\/(create|claim)$/);
       if (m && request.method === "POST") return handoff(request, env, m[1]);
       if (path === "/api/settings" && request.method === "GET") return json(publicSettings(await getSettings(env)));
-      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast)$/);
+      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast|tap|tap-reset)$/);
       if (m) return adminApi(request, env, ctx, m[1], safeEqual);
+      if (path === "/brand/tap") return serveTap(env);
       m = path.match(/^\/brand\/icon-(180|192|512)\.png$/);
       if (m) return serveIcon(request, env, m[1]);
       if (path === "/app.webmanifest") return serveManifest(env);

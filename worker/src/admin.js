@@ -14,6 +14,9 @@ export const DEFAULT_SETTINGS = {
   user_theme_toggle: true,  // زر ليلي/أبيض للمستخدم
   splash_ms: 1700,          // مدة شاشة الافتتاح
   tap_sound: true,          // صوت النقر
+  tap_volume: 60,           // ارتفاع صوت النقر (٠-١٠٠)
+  custom_tap: false,        // صوت نقر مرفوع من الأدمن؟
+  tap_v: 0,
   accent: "#e0a84a",
   icon_v: 0,                // يزيد كل ما تغيّرت الأيقونة
   custom_icon: false,       // فيه أيقونة مرفوعة من الأدمن؟
@@ -77,6 +80,7 @@ function clean(input, current) {
     out.snap_url = /^https:\/\/([a-z0-9-]+\.)*snapchat\.com\//i.test(u) ? u : current.snap_url;
   }
   for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound"]) if (k in input) out[k] = bool(input[k]);
+  if ("tap_volume" in input) out.tap_volume = int(input.tap_volume, 0, 100, current.tap_volume);
   if ("splash_ms" in input) out.splash_ms = int(input.splash_ms, 300, 6000, current.splash_ms);
   if ("dialects_enabled" in input && Array.isArray(input.dialects_enabled)) {
     const list = input.dialects_enabled.filter((d) => DIALECT_KEYS.includes(d));
@@ -208,6 +212,26 @@ export async function adminApi(request, env, ctx, action, safeEqual) {
     cache = { at: 0, value: null };
     return json({ ok: true });
   }
+  if (action === "tap" && request.method === "POST") {
+    const form = await request.formData();
+    const f = form.get("sound");
+    if (!f || typeof f === "string" || !/^audio\//.test(f.type || "") || f.size > 400 * 1024)
+      return json({ error: "لازم ملف صوت أصغر من ٤٠٠ كيلو 🎵" }, 400);
+    await env.BUCKET.put("config/tap-sound", await f.arrayBuffer(), { httpMetadata: { contentType: f.type } });
+    const s = await getSettings(env);
+    const next = { ...s, custom_tap: true, tap_v: (s.tap_v || 0) + 1, tap_sound: true };
+    await env.BUCKET.put(SETTINGS_KEY, JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
+    cache = { at: 0, value: null };
+    return json({ ok: true, settings: next });
+  }
+  if (action === "tap-reset" && request.method === "POST") {
+    await env.BUCKET.delete("config/tap-sound");
+    const s = await getSettings(env);
+    const next = { ...s, custom_tap: false, tap_v: (s.tap_v || 0) + 1 };
+    await env.BUCKET.put(SETTINGS_KEY, JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
+    cache = { at: 0, value: null };
+    return json({ ok: true, settings: next });
+  }
   if (action === "broadcast" && request.method === "POST") {
     let b;
     try { b = JSON.parse((await request.text()).slice(0, 3000)); } catch { return json({ error: "طلب غير صالح" }, 400); }
@@ -244,4 +268,11 @@ export async function serveManifest(env) {
       { src: `/brand/icon-512.png?v=${v}`, sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   }), { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "no-cache" } });
+}
+
+/** صوت النقر اللي رفعه الأدمن */
+export async function serveTap(env) {
+  const obj = await env.BUCKET.get("config/tap-sound");
+  if (!obj) return new Response("", { status: 404 });
+  return new Response(obj.body, { headers: { "content-type": obj.httpMetadata?.contentType || "audio/mpeg", "cache-control": "public, max-age=3600", "x-content-type-options": "nosniff" } });
 }

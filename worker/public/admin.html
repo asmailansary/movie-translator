@@ -146,6 +146,16 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     <div class="card">
       <h2>الإحساس ✨</h2>
       <div class="row"><div class="lbl">صوت النقر 🔊<small>صوت خفيف مع كل ضغطة (يسكت لو الجوال صامت)</small></div><label class="sw"><input type="checkbox" id="s_tap_sound"><i></i></label></div>
+      <label class="f">صوت النقر من جوالك 🎵 <b id="tapName"></b></label>
+      <div style="display:flex;gap:8px">
+        <button class="btn sec" type="button" id="pickTap" style="flex:2">اختر صوت من الملفات</button>
+        <button class="btn sec" type="button" id="playTap" style="flex:1">اسمع ▶️</button>
+      </div>
+      <button class="btn danger" type="button" id="resetTap" style="margin-top:8px">رجّع الصوت الأصلي</button>
+      <input type="file" id="tapFile" accept="audio/*,.m4a,.mp3,.wav,.caf,.aac" class="hidden">
+      <p class="note">💡 سجّل صوتك من «المذكرات الصوتية» ← مشاركة ← «حفظ في الملفات». الأفضل صوت قصير (أقل من ثانية).</p>
+      <label class="f">ارتفاع صوت النقر: <b id="tapVolV"></b></label>
+      <input type="range" id="s_tap_volume" min="0" max="100" step="5" style="width:100%;accent-color:var(--accent)">
       <label class="f">مدة شاشة الافتتاح: <b id="splashV"></b></label>
       <input type="range" id="s_splash_ms" min="300" max="6000" step="100" style="width:100%;accent-color:var(--accent)">
     </div>
@@ -348,6 +358,10 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
     const sp = $("#s_splash_ms"), spv = () => { $("#splashV").textContent = (val("splash_ms") / 1000).toFixed(1) + " ثانية"; };
     sp.value = val("splash_ms"); spv(); sp.oninput = () => { set("splash_ms", +sp.value); spv(); };
+    const tv = $("#s_tap_volume"), tvv = () => { $("#tapVolV").textContent = val("tap_volume") + "٪"; };
+    tv.value = val("tap_volume"); tvv(); tv.oninput = () => { set("tap_volume", +tv.value); tvv(); };
+    $("#tapName").textContent = S.custom_tap ? "(صوتك ✓)" : "(الأصلي)";
+    $("#resetTap").classList.toggle("hidden", !S.custom_tap);
     // اللهجات
     const en = val("dialects_enabled");
     $("#dialChips").innerHTML = ""; $("#defChips").innerHTML = "";
@@ -413,6 +427,42 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     if (!confirm("ترجّع الأيقونة الأصلية؟")) return;
     const r = await api("icon-reset", { method: "POST" });
     if (r.ok) { S.icon_v = (S.icon_v || 0) + 1; render(); toast("رجعت الأيقونة الأصلية ✓"); }
+  };
+
+  // ───── صوت النقر من الجوال
+  let tapCtx = null;
+  async function playSound(src) {
+    tapCtx = tapCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (tapCtx.state === "suspended") await tapCtx.resume();
+    const buf = await tapCtx.decodeAudioData(await (await fetch(src, { cache: "no-store" })).arrayBuffer());
+    const n = tapCtx.createBufferSource(), g = tapCtx.createGain();
+    g.gain.value = (val("tap_volume") ?? 60) / 100; n.buffer = buf; n.connect(g).connect(tapCtx.destination); n.start();
+  }
+  $("#pickTap").onclick = () => $("#tapFile").click();
+  $("#tapFile").onchange = async () => {
+    const f = $("#tapFile").files[0]; if (!f) return;
+    if (f.size > 400 * 1024) { toast("الصوت كبير 😅 خله أقل من ٤٠٠ كيلو"); $("#tapFile").value = ""; return; }
+    try {
+      // نسمّعك إياه قبل الرفع (لو ما اشتغل هنا نرفعه عادي، الآيفون يشغّل m4a و mp3)
+      const url = URL.createObjectURL(f); try { await playSound(url); } catch {} URL.revokeObjectURL(url);
+      const form = new FormData(); form.append("sound", f, f.name);
+      toast("نرفع الصوت…");
+      const r = await api("tap", { method: "POST", body: form }); const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      S = d.settings; render(); toast("تم ✓ صار صوت النقر صوتك 🎵");
+    } catch (err) { toast(err?.message && !/decode/i.test(err.message) ? err.message : "ما قدرنا نشغّل هالملف 😕 جرّب m4a أو mp3"); }
+    $("#tapFile").value = "";
+  };
+  $("#playTap").onclick = async () => {
+    try {
+      if (S.custom_tap) await playSound("/brand/tap?v=" + (S.tap_v || 0));
+      else toast("الصوت الأصلي يشتغل داخل التطبيق 🔊");
+    } catch { toast("ما قدرنا نشغّله 😕"); }
+  };
+  $("#resetTap").onclick = async () => {
+    if (!confirm("ترجّع صوت النقر الأصلي؟")) return;
+    const r = await api("tap-reset", { method: "POST" }); const d = await r.json();
+    if (r.ok) { S = d.settings; render(); toast("رجع الصوت الأصلي ✓"); }
   };
 
   // ───── إشعار للكل
