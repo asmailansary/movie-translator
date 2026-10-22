@@ -126,6 +126,7 @@ async function dispatch(env, job, origin) {
           source: job.source,
           dialect: job.dialect,
           callback: origin,
+          reuse: job.reuse ? "1" : "0",
         },
       }),
     }
@@ -180,10 +181,12 @@ async function createJob(request, env) {
       return json({ job_id: activeId, video_id: vid });
   }
 
+  // الفلم مسموع من قبل بلهجة ثانية؟ نترجم بس، بدون سحب الصوت من جديد
+  const reuse = await findTranscript(env, vid);
   const id = newId();
   const job = {
-    id, video_id: vid, source, dialect, status: "queued",
-    stage: "نجهّز لك الفلم… 🍿", progress: 0.01,
+    id, video_id: vid, source, dialect, status: "queued", reuse,
+    stage: reuse ? `نترجم ${dialect === "fusha" ? "بالفصحى" : "باللهجة ال" + DIALECTS[dialect].name} ⚡` : "نجهّز لك الفلم… 🍿", progress: 0.01,
     title: "", duration: 0, ready_until: 0, error: null, segments: [],
     created: Date.now(), updated: Date.now(),
   };
@@ -197,6 +200,25 @@ async function createJob(request, env) {
   }
   await env.BUCKET.put(activeKey(vid, source, dialect), id);
   return json({ job_id: id, video_id: vid });
+}
+
+async function findTranscript(env, vid) {
+  const list = await env.BUCKET.list({ prefix: `subs/v2/${vid}__`, limit: 20 });
+  return list.objects?.[0]?.key || null;
+}
+
+// الكلام الأصلي (بدون الترجمة) لفلم مسموع من قبل
+async function source(request, env, id) {
+  if (!(await safeEqual(request.headers.get("x-ingest-secret") || "", env.INGEST_SECRET)))
+    return json({ error: "unauthorized" }, 401);
+  const job = await getJSON(env, jobKey(id));
+  if (!job || !job.reuse) return json({ error: "not found" }, 404);
+  const subs = await getJSON(env, job.reuse);
+  if (!subs) return json({ error: "not found" }, 404);
+  return json({
+    title: subs.title || "", duration: subs.duration || 0,
+    segments: (subs.segments || []).map(({ start, end, src }) => ({ start, end, src })),
+  });
 }
 
 async function loadJob(env, id) {
@@ -387,6 +409,8 @@ export default {
       if (m && request.method === "GET") return getJob(request, env, m[1], Boolean(m[2]));
       m = path.match(/^\/api\/ingest\/([a-f0-9]{12})$/);
       if (m && request.method === "POST") return ingest(request, env, m[1], ctx);
+      m = path.match(/^\/api\/source\/([a-f0-9]{12})$/);
+      if (m && request.method === "GET") return source(request, env, m[1]);
       m = path.match(/^\/api\/push\/(key|subscribe|unsubscribe|test)$/);
       if (m) return pushApi(request, env, m[1]);
       m = path.match(/^\/api\/favorites(?:\/([A-Za-z0-9_-]{11}__[a-z]+__[a-z]+))?$/);

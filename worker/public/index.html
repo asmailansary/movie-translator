@@ -499,7 +499,7 @@ body.cinema .not-cinema{display:none!important}
   async function switchDialect(d) {
     if (!job || d === dialect) return;
     const old = dialect; setDialect(d);
-    toast(`نجهّز الترجمة بالـ${dName(d)}… ⏳`);
+    toast(`نترجم ${d === "fusha" ? "بالفصحى" : "باللهجة ال" + dName(d)}… ⚡`);
     try {
       await savePosition();
       const r = await requestJob(job.vid, lang, d);

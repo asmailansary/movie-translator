@@ -40,6 +40,7 @@ SOURCE = os.environ.get("SOURCE", "auto").strip()
 DIALECT = os.environ.get("DIALECT", "najdi").strip()
 CALLBACK = os.environ.get("CALLBACK", "").strip().rstrip("/")
 INGEST_SECRET = os.environ.get("INGEST_SECRET", "").strip()
+REUSE = os.environ.get("REUSE", "0").strip() == "1"   # الكلام الأصلي جاهز من قبل: نترجم بس
 
 # Groq يرفض الطلبات اللي توقيعها Python-urllib (خطأ 1010)، فنعرّف نفسنا باسم واضح
 UA = "movie-translator/1.0 (+https://github.com/asmailansary/movie-translator)"
@@ -577,7 +578,50 @@ def validate_inputs():
 
 
 # ───────────────────────── تشغيل المهمة كاملة ─────────────────────────
+def fetch_source():
+    req = urllib.request.Request(f"{CALLBACK}/api/source/{JOB_ID}",
+                                 headers={"X-Ingest-Secret": INGEST_SECRET, "User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def run_reuse():
+    """تبديل لهجة: الكلام الأصلي وتوقيته جاهزين، نترجم بس (بدون سحب أو سماع الصوت)."""
+    report(status="running", stage="نترجم بلهجتك الجديدة ⚡", progress=0.05)
+    data = fetch_source()
+    title, duration, segs = data.get("title", ""), data.get("duration", 0), data.get("segments") or []
+    report(title=title, duration=duration)
+    system = build_system_prompt(DIALECT, title)
+    groups = {}
+    for sg in segs:
+        groups.setdefault(int(sg["start"] // CHUNK_SECONDS), []).append(dict(sg))
+    keys = sorted(groups)
+    total = max(1, len(keys))
+    context, pool = [], ThreadPoolExecutor(TRANSLATE_WORKERS)
+    for n, k in enumerate(keys, 1):
+        part = groups[k]
+        batches = [part[i: i + TRANSLATE_BATCH] for i in range(0, len(part), TRANSLATE_BATCH)]
+        futures = []
+        for bi, batch in enumerate(batches):
+            ctx = context if bi == 0 else [x["src"] for x in batches[bi - 1][-3:]]
+            futures.append(pool.submit(translate_batch, batch, system, ctx))
+        for batch, fut in zip(batches, futures):
+            for x, ar in zip(batch, fut.result()):
+                x["ar"] = ar
+        context = [x["src"] for x in part[-3:]]
+        report(
+            append=part,
+            stage=("أول جزء جاهز! 🍿 والباقي يكمل وانت تتفرج" if n == 1 and total > 1 else f"نترجم الباقي ☕ ({n} من {total})"),
+            progress=round(0.05 + 0.93 * n / total, 3),
+            ready_until=(k + 1) * CHUNK_SECONDS if n < total else 10**9,
+        )
+    pool.shutdown()
+    report(status="done", stage="الفلم كله جاهز ✓ استمتع 🎬", progress=1.0, ready_until=10**9)
+
+
 def run():
+    if REUSE:
+        return run_reuse()
     workdir = Path(tempfile.mkdtemp(prefix="mt_"))
     report(status="running", stage="نسحب صوت الفلم 🎧", progress=0.03)
 

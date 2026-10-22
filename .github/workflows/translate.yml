@@ -22,6 +22,10 @@ on:
       callback:
         required: true
         type: string
+      reuse:
+        required: false
+        default: "0"
+        type: string
 
 permissions:
   contents: read
@@ -51,21 +55,25 @@ jobs:
 
       # yt-dlp يحتاج deno عشان يقرأ يوتيوب
       - uses: denoland/setup-deno@v2
+        if: inputs.reuse != '1'
         with:
           deno-version: v2.x
 
       # ffmpeg جاهز (نسخة ثابتة سريعة بدل apt-get البطيء)
       - uses: FedericoCarboni/setup-ffmpeg@v3
+        if: inputs.reuse != '1'
         with:
           ffmpeg-version: release
 
       - name: تثبيت yt-dlp
+        if: inputs.reuse != '1'
         timeout-minutes: 5
         run: pip install -q -U "yt-dlp[default]" "urllib3[socks]"
 
       # يوتيوب يمنع عناوين GitHub أحياناً؛ WARP يخلي طلبات يوتيوب تطلع من Cloudflare
       # (wgcf + wireproxy: برامج جاهزة بدون apt، تشتغل في ثواني، ويمر منها يوتيوب بس)
       - name: تشغيل Cloudflare WARP
+        if: inputs.reuse != '1'
         timeout-minutes: 3
         continue-on-error: true
         env:
@@ -105,4 +113,5 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          REUSE: ${{ inputs.reuse }}
         run: python pipeline/translate.py
