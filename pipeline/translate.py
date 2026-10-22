@@ -241,8 +241,11 @@ def probe_duration(path: Path) -> float:
         return float(CHUNK_SECONDS)
 
 
+SECRET_NAMES = {"Groq": "GROQ_API_KEY", "Gemini": "GEMINI_API_KEY", "Claude": "ANTHROPIC_API_KEY"}
+
+
 # ───────────────────────── 2) التفريغ الصوتي (Groq Whisper) ─────────────────────────
-def http_json(url, headers, body: bytes, timeout=300, retries=4):
+def http_json(url, headers, body: bytes, timeout=300, retries=4, service=""):
     last = None
     for attempt in range(retries):
         req = urllib.request.Request(url, data=body, headers=headers, method="POST")
@@ -253,7 +256,8 @@ def http_json(url, headers, body: bytes, timeout=300, retries=4):
             detail = e.read().decode("utf-8", "ignore")[:400]
             last = f"HTTP {e.code}: {detail}"
             if e.code in (401, 403):
-                raise UserError("مفتاح الخدمة غير صحيح أو منتهي. راجع المفاتيح في إعدادات الاستضافة.")
+                print(f"::warning::{service} HTTP {e.code}: {detail[:250]}")
+                raise UserError(f"مفتاح {service or 'الخدمة'} غير صحيح أو ما له صلاحية (HTTP {e.code}). راجع سر {SECRET_NAMES.get(service, '')} في GitHub.")
             if e.code in (429, 500, 502, 503, 504, 529):
                 wait = float(e.headers.get("retry-after") or (5 * (attempt + 1)))
                 time.sleep(min(wait, 60))
@@ -283,7 +287,7 @@ def transcribe_chunk(path: Path, offset: float, lang):
     data = http_json(
         "https://api.groq.com/openai/v1/audio/transcriptions",
         {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
-        b"".join(parts),
+        b"".join(parts), service="Groq",
     )
     out = []
     for s in data.get("segments") or []:
@@ -350,14 +354,21 @@ def translators():
     return order
 
 
+_DEAD = set()
+
+
 def call_llm(system, user_text):
     """يجرب خدمات الترجمة بالترتيب؛ لو وحدة خلص رصيدها اليومي ينتقل للي بعدها."""
     last = None
     for name, fn in translators():
+        if name in _DEAD:
+            continue
         try:
             return fn(system, user_text)
-        except UserError:
-            raise
+        except UserError as e:   # مفتاح غلط: ما نعيد تجربته، ننتقل للي بعده
+            print(f"::warning::[{name}] {e}")
+            _DEAD.add(name)
+            last = e
         except Exception as e:  # noqa: BLE001
             print(f"[{name}] فشل، أجرب اللي بعده:", str(e)[:200])
             last = e
@@ -377,8 +388,15 @@ def pick_gemini_model():
             "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
             headers={"x-goog-api-key": GEMINI_API_KEY},
         )
-        with urllib.request.urlopen(req, timeout=30) as r:
-            models = json.loads(r.read().decode("utf-8")).get("models", [])
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                models = json.loads(r.read().decode("utf-8")).get("models", [])
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "ignore")[:250]
+            print(f"::warning::Gemini models HTTP {e.code}: {detail}")
+            if e.code in (400, 401, 403):
+                raise UserError(f"مفتاح Gemini غير صحيح أو ما له صلاحية (HTTP {e.code}). راجع سر GEMINI_API_KEY في GitHub.")
+            raise
         bad = ("lite", "image", "tts", "live", "audio", "embed", "exp", "preview", "thinking", "8b")
         names = [m["name"].split("/", 1)[1] for m in models
                  if "generateContent" in (m.get("supportedGenerationMethods") or [])
@@ -408,7 +426,7 @@ def call_gemini(system, user_text):
         data = http_json(
             f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
             {"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-            body, retries=3,
+            body, retries=3, service="Gemini",
         )
     except RuntimeError as e:
         if "HTTP 404" in str(e) and not GEMINI_MODEL:   # الموديل انسحب؛ نختار غيره
@@ -428,7 +446,7 @@ def call_groq_llm(system, user_text):
     data = http_json(
         "https://api.groq.com/openai/v1/chat/completions",
         {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-        body,
+        body, service="Groq",
     )
     return data["choices"][0]["message"]["content"] or ""
 
@@ -443,7 +461,7 @@ def call_claude(system, user_text):
     data = http_json(
         "https://api.anthropic.com/v1/messages",
         {"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-        body,
+        body, service="Claude",
     )
     return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
