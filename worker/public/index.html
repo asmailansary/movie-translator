@@ -182,6 +182,12 @@ body.cinema .not-cinema{display:none!important}
 .fav .del{flex:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);color:var(--muted);display:grid;place-items:center}
 .fav .del svg{width:18px;height:18px}
 .empty{color:var(--muted);font-size:13px;margin:0}
+.snap{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);background:linear-gradient(135deg,#2a2a10,#17140f);border-color:#4a4718}
+.snap .ghost{width:42px;height:42px;border-radius:12px;background:#fffc00;display:grid;place-items:center;font-size:22px;flex:none}
+.snap span:nth-child(2){flex:1;line-height:1.6}
+.snap small{color:var(--muted)}
+.snap .go2{font-size:24px;color:var(--muted)}
+.stage video.native{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none}
 .move{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
 .move summary{font-size:13px;color:var(--muted);cursor:pointer}
 .mv{display:flex;gap:8px;margin-top:8px}
@@ -197,7 +203,7 @@ body.cinema .not-cinema{display:none!important}
     </div>
     <div>
       <h1>مترجم الأفلام</h1>
-      <p>الصق رابط الفلم واختر لهجتك 🎬</p>
+      <p>الصق رابط فلم أو مقطع واختر لهجتك 🎬</p>
     </div>
   </header>
 
@@ -224,8 +230,10 @@ body.cinema .not-cinema{display:none!important}
   </section>
 
   <form id="form" class="card" autocomplete="off">
-    <label class="t" for="url">رابط الفلم من يوتيوب</label>
-    <input id="url" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…" required>
+    <label class="t" for="url">رابط الفلم من يوتيوب 🎬</label>
+    <input id="url" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…">
+    <label class="t" for="clipUrl" style="margin-top:12px">رابط المقطع من السوشل 📱</label>
+    <input id="clipUrl" type="url" inputmode="url" placeholder="تيك توك، انستا، أو شورتس يوتيوب">
     <div class="row">
       <div>
         <label class="t">لغة الفلم</label>
@@ -256,6 +264,12 @@ body.cinema .not-cinema{display:none!important}
       <div class="mv"><input id="devIn" dir="ltr" placeholder="الصق الرمز هنا"><button class="btn2" type="button" id="useDev">استخدم</button></div>
     </details>
   </section>
+
+  <a class="card snap" id="snapBox" href="https://snapchat.com/t/T4QBeB0D" target="_blank" rel="noopener">
+    <span class="ghost" aria-hidden="true">👻</span>
+    <span><b>تحتاج مساعدة أو عندك فكرة؟</b><br><small>كلمني على سناب، حياك 🤍</small></span>
+    <span class="go2" aria-hidden="true">‹</span>
+  </a>
 
   <section id="watch" class="hidden">
     <div class="stage paused" id="stage">
@@ -325,10 +339,12 @@ body.cinema .not-cinema{display:none!important}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 4.3 2.4h2c.7-1.3 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg>
         <span>حفظ</span>
       </button>
-      <button class="ibtn" id="dialBtn" type="button">🗣️ <span id="dialName">نجدية</span></button>
+      <button class="ibtn" id="dialBtn" type="button">تبديل الترجمة 🤹🏻</button>
+      <button class="ibtn hidden" id="dubBtn" type="button">🎙️ دبلجة</button>
       <span class="spacer"></span>
-      <a class="ibtn hidden" id="srtBtn" href="#" aria-label="تحميل ملف الترجمة">
+      <a class="ibtn hidden" id="srtBtn" href="#" aria-label="تحميل الترجمة">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
+        تحميل
       </a>
       <button class="ibtn" id="newBtn" type="button">فلم جديد</button>
     </div>
@@ -364,6 +380,10 @@ body.cinema .not-cinema{display:none!important}
   let job = null, segs = [], pollTimer = null, player = null, ytReady = false, pending = null;
   let offset = 0, size = store.get("size2", 12), showOrig = store.get("orig", false), lastIdx = -1, readyUntil = 0;
   let favs = [], isFav = false, title = "", duration = 0, speed = 1, jobDone = false, aspect = 16 / 9;
+  let readyDialects = [], introUntil = 0, lastStage = "";
+  const CLIP_INTRO = "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨";
+  // نفس الكلام بس للمقاطع: «المقطع» بدل «الفلم»
+  const word = t => (job?.kind === "clip" ? String(t).replace(/فلمك/g, "مقطعك").replace(/الفلم/g, "المقطع").replace(/فلم /g, "مقطع ") : t);
 
   // ───── البداية
   if (standalone && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -390,8 +410,9 @@ body.cinema .not-cinema{display:none!important}
     for (const [k, d] of Object.entries(cfg.dialects)) if (d.group === "dialect") $("#dialects").append(chip(d.name, k === dialect, () => setDialect(k)));
     // داخل المشغّل: كل اللهجات + الفصحى
     $("#sDialects").innerHTML = "";
-    for (const [k, d] of Object.entries(cfg.dialects)) $("#sDialects").append(chip(d.name, k === dialect, () => switchDialect(k)));
-    $("#dialName").textContent = dName(dialect);
+    for (const [k, d] of Object.entries(cfg.dialects))
+      $("#sDialects").append(chip(d.name + (readyDialects.includes(k) && k !== dialect ? " ⚡" : ""), k === dialect, () => switchDialect(k)));
+
   }
   $("#group").addEventListener("click", e => {
     const g = e.target.closest("button")?.dataset.g; if (!g) return;
@@ -410,32 +431,42 @@ body.cinema .not-cinema{display:none!important}
   const friendly = (status, msg) => msg || "صار شي غلط 😕 جرّب مرة ثانية";
 
   // ───── بدء الترجمة
-  async function requestJob(vid, src, dia) {
-    const r = await api("/api/jobs", { method: "POST", body: JSON.stringify({ url: "https://youtu.be/" + vid, source: src, dialect: dia }) });
+  async function requestJob(j, src, dia) {
+    const r = await api("/api/jobs", { method: "POST", body: JSON.stringify({ url: j.url || "https://youtu.be/" + j.vid, source: src, dialect: dia, kind: j.kind }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(friendly(r.status, d.error));
     return d;
   }
-  async function start(url, src, dia, resumeAt) {
+  async function start(url, src, dia, resumeAt, kind = "movie") {
     showErr("");
     const btn = $("#goBtn"); btn.disabled = true; btn.textContent = "لحظة… ⏳";
     try {
-      const r = await api("/api/jobs", { method: "POST", body: JSON.stringify({ url, source: src, dialect: dia }) });
+      const r = await api("/api/jobs", { method: "POST", body: JSON.stringify({ url, source: src, dialect: dia, kind }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(friendly(r.status, d.error));
       lang = src; dialect = dia; renderChips();
-      openJob(d.job_id, d.video_id, resumeAt || 0, /\/shorts\//.test(url));
+      openJob(d.job_id, d.video_id, resumeAt || 0, /\/shorts\//.test(url) || kind === "clip", d.platform || "youtube", kind, url);
     } catch (err) { showErr(err.message); window.scrollTo({ top: 0, behavior: "smooth" }); }
     finally { btn.disabled = false; btn.textContent = "ترجم وشغّل 🎬"; }
   }
   $("#form").addEventListener("submit", e => {
     e.preventDefault();
-    start($("#url").value, lang, dialect, 0);
+    const movie = $("#url").value.trim(), clip = $("#clipUrl").value.trim();
+    if (movie && clip) return showErr("حط رابط واحد بس 😅 يا فلم يا مقطع");
+    if (!movie && !clip) return showErr("الصق رابط الفلم أو المقطع أول 🔗");
+    start(movie || clip, lang, dialect, 0, clip ? "clip" : "movie");
   });
 
   function resetSubs() { segs = []; lastIdx = -1; readyUntil = 0; jobDone = false; $("#subs").innerHTML = ""; }
-  function openJob(id, vid, resumeAt, vertHint) {
-    job = { id, vid }; resetSubs(); title = ""; duration = 0;
+  function openJob(id, vid, resumeAt, vertHint, platform = "youtube", kind = "movie", url = "") {
+    job = { id, vid, platform, kind, url: url || (platform === "youtube" ? "https://youtu.be/" + vid : "") };
+    resetSubs(); title = ""; duration = 0; readyDialects = [];
+    $("#dubBtn").classList.toggle("hidden", kind !== "clip");
+    lastStage = "";
+    if (kind === "clip") {
+      introUntil = Date.now() + 3500; $("#stage-text").textContent = CLIP_INTRO; $("#pct").textContent = "";
+      const myJob = job; setTimeout(() => { if (job === myJob && lastStage) $("#stage-text").textContent = lastStage; }, 3600);
+    }
     aspect = 0; setAspect(vertHint ? 9 / 16 : 16 / 9);
     $("#form").classList.add("hidden"); $("#favBox").classList.add("hidden");
     $("#installTip").classList.add("hidden"); $("#pushTip").classList.add("hidden");
@@ -444,6 +475,7 @@ body.cinema .not-cinema{display:none!important}
     setHeart(favs.some(f => f.key === favKey()));
     stage.classList.remove("started", "ended"); stage.classList.add("paused");
     loadVideo(vid, resumeAt); poll(); updateHint();
+    document.title = kind === "clip" ? "مترجم المقاطع" : "مترجم الأفلام";
     window.scrollTo({ top: 0 });
     history.replaceState(null, "", "/?job=" + id);
   }
@@ -457,7 +489,7 @@ body.cinema .not-cinema{display:none!important}
       if (!r.ok || !d.video_id) return history.replaceState(null, "", "/");
       lang = d.source || lang; dialect = d.dialect || dialect; renderChips();
       const f = favs.find(x => x.key === `${d.video_id}__${lang}__${dialect}`);
-      openJob(q, d.video_id, f ? f.position : 0);
+      openJob(q, d.video_id, f ? f.position : 0, d.aspect && d.aspect < 1, d.platform || "youtube", d.kind || "movie", f?.url || "");
     } catch {}
   }
   navigator.serviceWorker?.addEventListener("message", e => { if (e.data?.type === "open") openFromUrl(e.data.url); });
@@ -476,29 +508,39 @@ body.cinema .not-cinema{display:none!important}
       if (d.title) { title = d.title; $("#ttl").textContent = title; }
       if (d.duration) duration = d.duration;
       if (d.aspect) setAspect(d.aspect);
-      $("#stage-text").textContent = d.status === "error" ? d.error : d.stage;
+      if (d.media_ready && job.platform !== "youtube") player?.setSrc?.(`/media/${job.vid}.mp4`);
+      if (Array.isArray(d.ready_dialects) && d.ready_dialects.join() !== readyDialects.join()) { readyDialects = d.ready_dialects; renderChips(); }
+      lastStage = word(d.status === "error" ? d.error : d.stage);
+      if (d.status === "error" || Date.now() > introUntil) $("#stage-text").textContent = lastStage;
       $("#stage-text").classList.toggle("err", d.status === "error");
       $("#pct").textContent = d.status === "error" ? "" : Math.round(d.progress * 100) + "%";
       $("#bar").style.width = (d.progress * 100) + "%";
-      if (d.status === "done") { jobDone = true; $("#srtBtn").classList.remove("hidden"); updateHint(); return; }
+      if (d.status === "done") {
+        jobDone = true; $("#srtBtn").classList.remove("hidden"); updateHint();
+        // نكمل نسأل شوي عشان نعرف متى تجهز باقي اللهجات
+        if (readyDialects.length < Object.keys(cfg?.dialects || {}).length) pollTimer = setTimeout(poll, 15000);
+        return;
+      }
       if (d.status === "error") { $("#hint").textContent = ""; $("#pushBtn2").classList.add("hidden"); return; }
       updateHint();
     } catch (err) { $("#stage-text").textContent = err.message || "النت فصل شوي… نحاول مرة ثانية 📶"; }
-    pollTimer = setTimeout(poll, segs.length ? 4000 : 2500);
+    pollTimer = setTimeout(poll, segs.length ? 4000 : (Date.now() < introUntil ? 1200 : 2500));
   }
 
   function updateHint() {
     const h = $("#hint"), b = $("#pushBtn2");
     b.classList.add("hidden");
-    if (jobDone) { h.textContent = "استمتع بالفلم 🍿 وإذا تبي تكمل بعدين اضغط ❤️ ونحفظ لك مكانك"; return; }
-    if (segs.length) { h.textContent = "تقدر تبدأ تتفرج الحين 🍿 والباقي يتجهز وانت تتابع"; return; }
-    if (pushOn()) h.textContent = "عادي تطلع من الأداة وتسوي أشغالك 🚶‍♂️ أول ما يجهز فلمك يوصلك إشعار 🔔";
-    else if (standalone && pushSupported) { h.textContent = "الفلم يتجهز خلال دقايق ⏳ تبي نعلمك أول ما يجهز؟"; b.classList.remove("hidden"); }
-    else h.textContent = "الفلم يتجهز خلال دقايق ⏳ خلك قريب، وإذا حطيت الأداة في الشاشة الرئيسية نقدر نرسل لك إشعار 🔔";
+    const set = t => { h.textContent = word(t); };
+    if (jobDone) return set("استمتع بالفلم 🍿 وتقدر تبدّل الترجمة لأي لهجة من «تبديل الترجمة 🤹🏻»");
+    if (segs.length) return set("تقدر تبدأ تتفرج الحين 🍿 والباقي يتجهز وانت تتابع");
+    if (pushOn()) set("عادي تطلع من الأداة وتسوي أشغالك 🚶‍♂️ أول ما يجهز فلمك يوصلك إشعار 🔔");
+    else if (standalone && pushSupported) { set("الفلم يتجهز خلال دقايق ⏳ تبي نعلمك أول ما يجهز؟"); b.classList.remove("hidden"); }
+    else set("الفلم يتجهز خلال دقايق ⏳ خلك قريب، وإذا حطيت الأداة في الشاشة الرئيسية نقدر نرسل لك إشعار 🔔");
   }
 
   $("#srtBtn").addEventListener("click", async e => {
     e.preventDefault();
+    if (!confirm(`ترا بيتحمل ملف الترجمة باللهجة اللي انت مختارها (${dName(dialect)}) فا تأكد بالاول وش انت ناوي عليه 🚀`)) return;
     const r = await api(`/api/jobs/${job.id}/srt`);
     const blob = await r.blob(); const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = (title || job.vid) + ".srt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -509,31 +551,65 @@ body.cinema .not-cinema{display:none!important}
     clearTimeout(pollTimer); job = null; try { player?.stopVideo(); } catch {}
     setCinema(false); closeSheet();
     $("#watch").classList.add("hidden"); $("#form").classList.remove("hidden"); $("#favBox").classList.remove("hidden");
-    $("#url").value = ""; $("#subs").innerHTML = ""; history.replaceState(null, "", "/"); loadFavs();
+    $("#url").value = ""; $("#clipUrl").value = ""; $("#subs").innerHTML = ""; document.title = "مترجم الأفلام"; history.replaceState(null, "", "/"); loadFavs();
   });
 
   // ───── تبديل اللهجة وانت تتفرج (بدون ما يوقف الفلم)
   async function switchDialect(d) {
     if (!job || d === dialect) return;
     const old = dialect; setDialect(d);
-    toast(`نترجم ${d === "fusha" ? "بالفصحى" : "باللهجة ال" + dName(d)}… ⚡`);
+    if (!readyDialects.includes(d)) toast(`نترجم ${d === "fusha" ? "بالفصحى" : "باللهجة ال" + dName(d)}… ⚡`);
     try {
       await savePosition();
-      const r = await requestJob(job.vid, lang, d);
-      job = { id: r.job_id, vid: job.vid }; resetSubs();
+      const r = await requestJob(job, lang, d);
+      job = { ...job, id: r.job_id }; resetSubs(); introUntil = 0;
+      if (readyDialects.includes(d)) toast(`تم ✓ صارت الترجمة ${d === "fusha" ? "بالفصحى" : "بالـ" + dName(d)} ⚡`);
       setHeart(favs.some(f => f.key === favKey()));
       history.replaceState(null, "", "/?job=" + job.id);
       poll(); closeSheet();
     } catch (err) { setDialect(old); toast(err.message); }
   }
   $("#dialBtn").onclick = () => openSheet();
+  $("#dubBtn").onclick = () => toast("شغالين على الدبلجة واذا صارت متوفرة بنعلمك💬");
 
   // ───── المشغّل (يوتيوب مخفي، والأزرار حقتنا)
   const stage = $("#stage");
   window.onYouTubeIframeAPIReady = () => { ytReady = true; if (pending) loadVideo(...pending); };
   const s = document.createElement("script"); s.src = "https://www.youtube.com/iframe_api"; document.head.append(s);
 
+  function freshHost() {
+    try { player?.destroy?.(); } catch {}
+    player = null;
+    stage.querySelectorAll("iframe, video, #player").forEach(el => el.remove());
+    const d = document.createElement("div"); d.id = "player"; stage.prepend(d);
+  }
+  function nativePlayer(at) {
+    const v = document.createElement("video");
+    v.className = "native"; v.playsInline = true; v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", ""); v.preload = "auto";
+    stage.querySelector("#player").replaceWith(v);
+    v.addEventListener("play", () => onState({ data: 1 }));
+    v.addEventListener("pause", () => { if (!v.ended) onState({ data: 2 }); });
+    v.addEventListener("ended", () => onState({ data: 0 }));
+    v.addEventListener("loadedmetadata", () => { if (v.videoWidth && v.videoHeight) setAspect(v.videoWidth / v.videoHeight); if (at) v.currentTime = at; v.playbackRate = speed; });
+    stage.classList.add("started");   // مشغّلنا: أزرارنا شغّالة من أول لمسة
+    return {
+      native: true,
+      getCurrentTime: () => v.currentTime || 0, getDuration: () => (isFinite(v.duration) ? v.duration : 0),
+      getPlayerState: () => (v.ended ? 0 : v.paused ? 2 : 1),
+      playVideo: () => { if (!v.src) return toast(word("الفلم يتجهز للعرض… ⏳")); v.play().catch(() => {}); },
+      pauseVideo: () => v.pause(), stopVideo: () => v.pause(),
+      seekTo: t => { v.currentTime = t; }, setPlaybackRate: r => { v.playbackRate = r; },
+      getVideoLoadedFraction: () => { try { return v.buffered.length ? v.buffered.end(v.buffered.length - 1) / v.duration : 0; } catch { return 0; } },
+      setSrc: src => { if (!v.getAttribute("src")) { v.src = src; v.load(); } },
+      destroy: () => { v.pause(); v.removeAttribute("src"); v.load(); },
+    };
+  }
+
   function loadVideo(vid, at) {
+    if (job && job.platform !== "youtube") {   // تيك توك/انستا: مشغّلنا الخاص
+      freshHost(); player = nativePlayer(at); return;
+    }
+    if (player?.native) freshHost();
     if (!ytReady) { pending = [vid, at]; return; }
     pending = null;
     const startSeconds = Math.max(0, Math.floor(at || 0));
@@ -547,7 +623,7 @@ body.cinema .not-cinema{display:none!important}
   }
   // نكبّر إطار يوتيوب ٣ أضعاف ونخلي الفيديو بالنص: كذا العنوان والشعار يطلعون برا الشاشة
   function layout() {
-    const f = stage.querySelector("iframe"); if (!f) return;
+    const f = stage.querySelector("iframe"); if (!f || player?.native) return;
     const W = stage.clientWidth, H = stage.clientHeight;
     const vw = Math.min(W, H * aspect), vh = vw / aspect;
     Object.assign(f.style, { width: vw + "px", height: vh * 3 + "px", left: (W - vw) / 2 + "px", top: (H - vh) / 2 - vh + "px" });
@@ -717,13 +793,13 @@ body.cinema .not-cinema{display:none!important}
     for (const f of favs) {
       const row = document.createElement("div"); row.className = "fav";
       const open = document.createElement("button"); open.type = "button"; open.className = "open";
-      const tt = document.createElement("span"); tt.className = "tt"; tt.textContent = f.title || "فلم بدون اسم";
+      const tt = document.createElement("span"); tt.className = "tt"; tt.textContent = (f.kind === "clip" ? "📱 " : "🎬 ") + (f.title || (f.kind === "clip" ? "مقطع" : "فلم") + " بدون اسم");
       const sm = document.createElement("small");
       sm.textContent = `${dName(f.dialect)} · ${f.position > 5 ? "وقفت عند " + fmt(f.position) : "من البداية"}`;
       const mini = document.createElement("div"); mini.className = "mini";
       const bar = document.createElement("i"); bar.style.width = (f.duration ? Math.min(100, f.position / f.duration * 100) : 0) + "%"; mini.append(bar);
       open.append(tt, sm, mini);
-      open.onclick = () => { start("https://youtu.be/" + f.video_id, f.source, f.dialect, f.position); };
+      open.onclick = () => { start(f.url || "https://youtu.be/" + f.video_id, f.source, f.dialect, f.position, f.kind || "movie"); };
       const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.setAttribute("aria-label", "حذف");
       del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
       del.onclick = async () => {
@@ -742,9 +818,10 @@ body.cinema .not-cinema{display:none!important}
       if (r.ok) { favs = favs.filter(x => x.key !== key); setHeart(false); toast("شلناه من المحفوظة 💔"); }
     } else {
       const r = await api("/api/favorites", { method: "POST",
-        body: JSON.stringify({ video_id: job.vid, source: lang, dialect, title, position: now(), duration: total() }) });
+        body: JSON.stringify({ video_id: job.vid, source: lang, dialect, title, position: now(), duration: total(), kind: job.kind, url: job.url }) });
       const d = await r.json();
       if (r.ok && d.favorite) { favs = [d.favorite, ...favs.filter(x => x.key !== key)]; setHeart(true); toast("انحفظ ❤️ نرجعك لنفس المكان المرة الجاية"); }
+      else if (!r.ok) toast(d.error || "ما قدرنا نحفظ 😕");
     }
   };
   async function savePosition() {
@@ -752,7 +829,7 @@ body.cinema .not-cinema{display:none!important}
     const t = now(); if (!t) return;
     try {
       await api("/api/favorites", { method: "POST", keepalive: true,
-        body: JSON.stringify({ video_id: job.vid, source: lang, dialect, title, position: t, duration: total(), position_only: true }) });
+        body: JSON.stringify({ video_id: job.vid, source: lang, dialect, title, position: t, duration: total(), kind: job.kind, url: job.url, position_only: true }) });
       const f = favs.find(x => x.key === favKey()); if (f) f.position = t;
     } catch {}
   }

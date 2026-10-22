@@ -74,7 +74,39 @@ export function extractVideoId(raw) {
   return vid && YT_ID.test(vid) ? vid : null;
 }
 
+// معرّف موحّد: يوتيوب (11 حرف)، تيك توك tt_رقم، انستا ig_كود
+const VID_RE = /^(?:[A-Za-z0-9_-]{11}|tt_\d{6,25}|ig_[A-Za-z0-9_-]{5,40})$/;
+const VID_PART = "(?:[A-Za-z0-9_-]{11}|tt_\\d{6,25}|ig_[A-Za-z0-9_-]{5,40})";
+
+async function parseMedia(raw) {
+  const url = String(raw || "").trim();
+  const yt = extractVideoId(url);
+  if (yt) return { vid: yt, platform: "youtube", url: `https://www.youtube.com/watch?v=${yt}`, shorts: /\/shorts\//.test(url) };
+  let u;
+  try { u = new URL(url.includes("://") ? url : "https://" + url); } catch { return null; }
+  const host = u.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+  // روابط تيك توك المختصرة: نفتحها عشان نعرف رقم المقطع
+  if (["vm.tiktok.com", "vt.tiktok.com"].includes(host) || (host === "tiktok.com" && u.pathname.startsWith("/t/"))) {
+    try {
+      const r = await fetch(u.href, { redirect: "manual", headers: { "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" } });
+      const loc = r.headers.get("location");
+      if (loc) return parseMedia(new URL(loc, u.href).href);
+    } catch {}
+    return null;
+  }
+  if (host.endsWith("tiktok.com")) {
+    const m = u.pathname.match(/\/(?:video|photo)\/(\d{6,25})/);
+    if (m) return { vid: `tt_${m[1]}`, platform: "tiktok", url: `https://www.tiktok.com/@_/video/${m[1]}` };
+  }
+  if (host === "instagram.com" || host === "instagr.am") {
+    const m = u.pathname.match(/^\/(?:[^/]+\/)?(?:p|reel|reels|tv)\/([A-Za-z0-9_-]{5,40})/);
+    if (m) return { vid: `ig_${m[1]}`, platform: "instagram", url: `https://www.instagram.com/reel/${m[1]}/` };
+  }
+  return null;
+}
+
 const jobKey = (id) => `jobs/${id}.json`;
+const mediaKey = (vid) => `media/${vid}.mp4`;
 // v2: توقيت الكلمات (الترجمات القديمة تنعاد بالتوقيت الدقيق)
 const subsKey = (vid, src, d) => `subs/v2/${vid}__${src}__${d}.json`;
 const FAVS_KEY = "favorites.json";
@@ -126,6 +158,7 @@ async function dispatch(env, job, origin) {
           dialect: job.dialect,
           callback: origin,
           reuse: job.reuse ? "1" : "0",
+          media_url: job.platform === "youtube" ? "" : job.media_url,
         },
       }),
     }
@@ -156,8 +189,8 @@ async function checkLimit(env, dev) {
   const all = parseInt(env.DAILY_TOTAL || "30", 10);
   const key = `limits/${new Date().toISOString().slice(0, 10)}.json`;
   const l = (await getJSON(env, key)) || { total: 0, devices: {} };
-  if ((l.devices[dev] || 0) >= perDevice) return `وصلت حدك اليوم (${perDevice} أفلام جديدة) 😅 ارجع بكرة، والأفلام المترجمة من قبل تفتح عادي`;
-  if (l.total >= all) return "الأداة وصلت حدها اليوم 😅 ارجع بكرة، والأفلام المترجمة من قبل تفتح عادي";
+  if ((l.devices[dev] || 0) >= perDevice) return `وصلت حدك اليوم (${perDevice} ترجمات جديدة) 😅 ارجع بكرة، واللي مترجم من قبل يفتح عادي`;
+  if (l.total >= all) return "الأداة وصلت حدها اليوم 😅 ارجع بكرة، واللي مترجم من قبل يفتح عادي";
   l.total++;
   l.devices[dev] = (l.devices[dev] || 0) + 1;
   await putJSON(env, key, l);
@@ -175,11 +208,14 @@ async function createJob(request, env) {
   } catch {
     return json({ error: "طلب غير صالح." }, 400);
   }
-  const vid = extractVideoId(String(body.url || ""));
-  const shortsHint = /\/shorts\//.test(String(body.url || ""));
+  const kind = body.kind === "clip" ? "clip" : "movie";
+  const media = await parseMedia(body.url);
   const source = body.source || "auto";
   const dialect = body.dialect || "najdi";
-  if (!vid) return json({ error: "الرابط مو رابط فيديو يوتيوب صحيح." }, 400);
+  if (!media) return json({ error: kind === "clip" ? "الرابط مو رابط مقطع من يوتيوب أو تيك توك أو انستا 🤔" : "الرابط مو رابط فيديو يوتيوب صحيح 🤔" }, 400);
+  if (kind === "movie" && media.platform !== "youtube") return json({ error: "هذا رابط مقطع سوشل 📱 حطه في خانة «رابط المقطع من السوشل»" }, 400);
+  const vid = media.vid, shortsHint = media.shorts || media.platform !== "youtube";
+  const meta = { platform: media.platform, kind, media_url: media.url };
   if (!(source in LANGS) || !(dialect in DIALECTS)) return json({ error: "اختيار اللغة أو اللهجة غير صحيح." }, 400);
 
   // ترجمة جاهزة من قبل؟
@@ -187,11 +223,11 @@ async function createJob(request, env) {
   if (cached) {
     const id = newId();
     await putJSON(env, jobKey(id), {
-      id, video_id: vid, source, dialect, status: "done", cached: true,
+      id, video_id: vid, source, dialect, status: "done", cached: true, ...meta,
       stage: "جاهز ✓ ترجمته من قبل 🎬", progress: 1, ready_until: 1e9,
       title: cached.customMetadata?.title || "", created: Date.now(), updated: Date.now(),
     });
-    return json({ job_id: id, video_id: vid });
+    return json({ job_id: id, video_id: vid, platform: media.platform });
   }
 
   // نفس الفلم يترجم الحين؟
@@ -204,7 +240,7 @@ async function createJob(request, env) {
         existing.owners = [...(existing.owners || []), dev].slice(-20);
         await putJSON(env, jobKey(activeId), existing);
       }
-      return json({ job_id: activeId, video_id: vid });
+      return json({ job_id: activeId, video_id: vid, platform: media.platform });
     }
   }
 
@@ -216,7 +252,7 @@ async function createJob(request, env) {
   }
   const id = newId();
   const job = {
-    id, video_id: vid, source, dialect, status: "queued", reuse, owners: [dev], aspect: shortsHint ? 0.5625 : 0,
+    id, video_id: vid, source, dialect, status: "queued", reuse, owners: [dev], aspect: shortsHint ? 0.5625 : 0, ...meta,
     stage: reuse ? `نترجم ${dialect === "fusha" ? "بالفصحى" : "باللهجة ال" + DIALECTS[dialect].name} ⚡` : "نجهّز لك الفلم… 🍿", progress: 0.01,
     title: "", duration: 0, ready_until: 0, error: null, segments: [],
     created: Date.now(), updated: Date.now(),
@@ -230,7 +266,7 @@ async function createJob(request, env) {
     return json({ error: err }, 502);
   }
   await env.BUCKET.put(activeKey(vid, source, dialect), id);
-  return json({ job_id: id, video_id: vid });
+  return json({ job_id: id, video_id: vid, platform: media.platform });
 }
 
 async function findTranscript(env, vid) {
@@ -248,6 +284,7 @@ async function source(request, env, id) {
   if (!subs) return json({ error: "not found" }, 404);
   return json({
     title: subs.title || "", duration: subs.duration || 0, aspect: subs.aspect || 0,
+    have: await readyDialects(env, job.video_id, job.source),
     segments: (subs.segments || []).map(({ start, end, src }) => ({ start, end, src })),
   });
 }
@@ -261,6 +298,7 @@ async function loadJob(env, id) {
     job.title = subs?.title || job.title;
     job.duration = subs?.duration || 0;
     job.aspect = subs?.aspect || 0;
+    job.media_ready = Boolean(subs?.media_ready);
   }
   return checkTimeouts(job);
 }
@@ -279,7 +317,9 @@ async function getJob(request, env, id, wantSrt) {
   }
   const since = Math.max(0, parseInt(new URL(request.url).searchParams.get("since") || "0", 10) || 0);
   const segs = job.segments || [];
+  const ready = await readyDialects(env, job.video_id, job.source);
   return json({
+    platform: job.platform || "youtube", kind: job.kind || "movie", media_ready: Boolean(job.media_ready), ready_dialects: ready,
     video_id: job.video_id, source: job.source, dialect: job.dialect, status: job.status, stage: job.status === "error" ? job.error : job.stage,
     progress: job.progress || 0, title: job.title || "", duration: job.duration || 0, aspect: job.aspect || 0,
     error: job.error || null, ready_until: job.ready_until || 0,
@@ -293,7 +333,7 @@ async function ingest(request, env, id, ctx) {
   const job = await getJSON(env, jobKey(id));
   if (!job) return json({ error: "not found" }, 404);
   const p = await request.json();
-  for (const k of ["status", "stage", "progress", "title", "duration", "ready_until", "error", "aspect"])
+  for (const k of ["status", "stage", "progress", "title", "duration", "ready_until", "error", "aspect", "media_ready"])
     if (p[k] !== undefined) job[k] = p[k];
   if (Array.isArray(p.append)) {
     for (const s of p.append)
@@ -310,21 +350,88 @@ async function ingest(request, env, id, ctx) {
   if ((watchable || job.status === "error") && !job.notified) {
     job.notified = true;
     await putJSON(env, jobKey(id), job);
-    const name = job.title ? `«${job.title.slice(0, 60)}»` : "فلمك";
+    const clip = job.kind === "clip";
+    const name = job.title ? `«${job.title.slice(0, 60)}»` : (clip ? "مقطعك" : "فلمك");
     const msg = job.status === "error"
-      ? { title: "صار شي بالفلم 😕", body: `${name} ما ضبط معنا، افتح الأداة وشوف وش السالفة`, url: `/?job=${id}` }
-      : { title: "فلمك جاهز 🍿", body: `${name} صار جاهز بالترجمة، يلا نبدأ؟ 🎬`, url: `/?job=${id}` };
+      ? { title: clip ? "صار شي بالمقطع 😕" : "صار شي بالفلم 😕", body: `${name} ما ضبط معنا، افتح الأداة وشوف وش السالفة`, url: `/?job=${id}` }
+      : clip
+        ? { title: "مقطعك جاهز 👀", body: `${name} صار مفهوم بلهجتك، تعال شوف وش ينقال 👨🏻‍🎨`, url: `/?job=${id}` }
+        : { title: "فلمك جاهز 🍿", body: `${name} صار جاهز بالترجمة، يلا نبدأ؟ 🎬`, url: `/?job=${id}` };
     const origin = new URL(request.url).origin;
     ctx.waitUntil(notifyAll(env, msg, origin, job.owners || []).catch((e) => console.log("notify", e)));
   }
-  if (job.status === "done") {
-    await env.BUCKET.put(
-      subsKey(job.video_id, job.source, job.dialect),
-      JSON.stringify({ video_id: job.video_id, title: job.title, duration: job.duration, aspect: job.aspect || 0, segments: job.segments }),
-      { httpMetadata: { contentType: "application/json" }, customMetadata: { title: (job.title || "").slice(0, 200) } }
-    );
-  }
+  if (job.status === "done") await writeSubs(env, job, job.dialect, job.segments);
   return json({ ok: true });
+}
+
+async function writeSubs(env, job, dialect, segments) {
+  await env.BUCKET.put(
+    subsKey(job.video_id, job.source, dialect),
+    JSON.stringify({ video_id: job.video_id, title: job.title, duration: job.duration, aspect: job.aspect || 0,
+      platform: job.platform || "youtube", kind: job.kind || "movie", media_url: job.media_url || "", media_ready: Boolean(job.media_ready), segments }),
+    { httpMetadata: { contentType: "application/json" }, customMetadata: { title: (job.title || "").slice(0, 200), kind: job.kind || "movie" } }
+  );
+}
+
+// اللهجات الجاهزة لهالفلم (عشان التبديل الفوري)
+async function readyDialects(env, vid, src) {
+  const list = await env.BUCKET.list({ prefix: `subs/v2/${vid}__${src}__`, limit: 20 });
+  return (list.objects || []).map((o) => o.key.split("__").pop().replace(".json", "")).filter((d) => d in DIALECTS);
+}
+
+// GitHub يرسل ترجمة لهجة ثانية جهزت في الخلفية
+async function ingestDialect(request, env, id, dialect) {
+  if (!(await safeEqual(request.headers.get("x-ingest-secret") || "", env.INGEST_SECRET)))
+    return json({ error: "unauthorized" }, 401);
+  if (!(dialect in DIALECTS)) return json({ error: "bad dialect" }, 400);
+  const job = await getJSON(env, jobKey(id));
+  if (!job) return json({ error: "not found" }, 404);
+  const p = await request.json();
+  const segs = (p.segments || []).filter((s) => typeof s.start === "number" && typeof s.end === "number")
+    .map((s) => ({ start: s.start, end: s.end, src: String(s.src || ""), ar: String(s.ar || "") }));
+  if (!segs.length) return json({ error: "empty" }, 400);
+  await writeSubs(env, job, dialect, segs);
+  return json({ ok: true });
+}
+
+// GitHub يرفع المقطع (تيك توك/انستا) عشان نشغّله بمشغّلنا
+async function ingestMedia(request, env, id) {
+  if (!(await safeEqual(request.headers.get("x-ingest-secret") || "", env.INGEST_SECRET)))
+    return json({ error: "unauthorized" }, 401);
+  const job = await getJSON(env, jobKey(id));
+  if (!job || job.platform === "youtube") return json({ error: "not found" }, 404);
+  await env.BUCKET.put(mediaKey(job.video_id), request.body, { httpMetadata: { contentType: "video/mp4" } });
+  job.media_ready = true;
+  job.updated = Date.now();
+  await putJSON(env, jobKey(id), job);
+  // تنظيف: المقاطع الأقدم من ١٤ يوم تنمسح عشان المساحة
+  const old = Date.now() - 14 * 864e5;
+  const list = await env.BUCKET.list({ prefix: "media/", limit: 500 });
+  for (const o of list.objects || []) if (o.uploaded && new Date(o.uploaded).getTime() < old) await env.BUCKET.delete(o.key);
+  return json({ ok: true });
+}
+
+// تشغيل المقطع المحفوظ (مع دعم التقديم/الرجوع اللي يحتاجه الآيفون)
+async function serveMedia(request, env, vid) {
+  const range = request.headers.get("range");
+  let opts = {};
+  const m = range && range.match(/bytes=(\d*)-(\d*)/);
+  if (m) {
+    const start = m[1] ? parseInt(m[1], 10) : undefined, end = m[2] ? parseInt(m[2], 10) : undefined;
+    opts.range = start === undefined ? { suffix: end } : end === undefined ? { offset: start } : { offset: start, length: end - start + 1 };
+  }
+  const obj = await env.BUCKET.get(mediaKey(vid), opts);
+  if (!obj) return new Response("المقطع انتهت صلاحيته، افتحه من جديد 🔄", { status: 404 });
+  const h = new Headers({ "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff" });
+  if (m && obj.range) {
+    const off = obj.range.offset ?? (obj.size - obj.range.suffix);
+    const len = obj.range.length ?? (obj.size - off);
+    h.set("content-range", `bytes ${off}-${off + len - 1}/${obj.size}`);
+    h.set("content-length", String(len));
+    return new Response(obj.body, { status: 206, headers: h });
+  }
+  h.set("content-length", String(obj.size));
+  return new Response(obj.body, { headers: h });
 }
 
 
@@ -355,7 +462,7 @@ async function favorites(request, env, key) {
     } catch {
       return json({ error: "طلب غير صالح." }, 400);
     }
-    const vid = YT_ID.test(String(b.video_id || "")) ? b.video_id : null;
+    const vid = VID_RE.test(String(b.video_id || "")) ? b.video_id : null;
     if (!vid || !(b.source in LANGS) || !(b.dialect in DIALECTS)) return json({ error: "بيانات غير صحيحة." }, 400);
     const k = `${vid}__${b.source}__${b.dialect}`;
     const old = favs[k] || {};
@@ -364,6 +471,8 @@ async function favorites(request, env, key) {
     const num = (x, d) => (Number.isFinite(+x) && +x >= 0 ? Math.min(+x, 86400) : d);
     favs[k] = {
       key: k, video_id: vid, source: b.source, dialect: b.dialect,
+      kind: b.kind === "clip" ? "clip" : (old.kind || "movie"),
+      url: /^https:\/\/(www\.)?(youtube\.com|youtu\.be|tiktok\.com|instagram\.com)\//.test(String(b.url || "")) ? String(b.url).slice(0, 300) : (old.url || ""),
       title: String(b.title ?? old.title ?? "").slice(0, 200),
       position: num(b.position, old.position || 0),
       duration: num(b.duration, old.duration || 0),
@@ -436,11 +545,17 @@ export default {
       if (m && request.method === "GET") return getJob(request, env, m[1], Boolean(m[2]));
       m = path.match(/^\/api\/ingest\/([a-f0-9]{12})$/);
       if (m && request.method === "POST") return ingest(request, env, m[1], ctx);
+      m = path.match(/^\/api\/subs\/([a-f0-9]{12})\/([a-z]+)$/);
+      if (m && request.method === "POST") return ingestDialect(request, env, m[1], m[2]);
+      m = path.match(/^\/api\/media\/([a-f0-9]{12})$/);
+      if (m && request.method === "PUT") return ingestMedia(request, env, m[1]);
+      m = path.match(new RegExp(`^/media/(${VID_PART})\\.mp4$`));
+      if (m && (request.method === "GET" || request.method === "HEAD")) return serveMedia(request, env, m[1]);
       m = path.match(/^\/api\/source\/([a-f0-9]{12})$/);
       if (m && request.method === "GET") return source(request, env, m[1]);
       m = path.match(/^\/api\/push\/(key|subscribe|unsubscribe|test)$/);
       if (m) return pushApi(request, env, m[1]);
-      m = path.match(/^\/api\/favorites(?:\/([A-Za-z0-9_-]{11}__[a-z]+__[a-z]+))?$/);
+      m = path.match(new RegExp(`^/api/favorites(?:/(${VID_PART}__[a-z]+__[a-z]+))?$`));
       if (m) return favorites(request, env, m[1]);
       if (path.startsWith("/api/")) return json({ error: "غير موجود" }, 404);
       return env.ASSETS.fetch(request);

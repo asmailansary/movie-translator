@@ -26,6 +26,10 @@ on:
         required: false
         default: "0"
         type: string
+      media_url:
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -114,4 +118,5 @@ jobs:
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           REUSE: ${{ inputs.reuse }}
+          MEDIA_URL: ${{ inputs.media_url }}
         run: python pipeline/translate.py

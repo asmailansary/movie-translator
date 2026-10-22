@@ -41,6 +41,8 @@ DIALECT = os.environ.get("DIALECT", "najdi").strip()
 CALLBACK = os.environ.get("CALLBACK", "").strip().rstrip("/")
 INGEST_SECRET = os.environ.get("INGEST_SECRET", "").strip()
 REUSE = os.environ.get("REUSE", "0").strip() == "1"   # الكلام الأصلي جاهز من قبل: نترجم بس
+MEDIA_URL = os.environ.get("MEDIA_URL", "").strip()   # مقطع تيك توك/انستا (غير يوتيوب)
+BG_ORDER = ["najdi", "fusha", "hijazi", "khaleeji", "yemeni", "egyptian", "shami", "iraqi"]
 
 # Groq يرفض الطلبات اللي توقيعها Python-urllib (خطأ 1010)، فنعرّف نفسنا باسم واضح
 UA = "movie-translator/1.0 (+https://github.com/asmailansary/movie-translator)"
@@ -141,14 +143,15 @@ def extract_video_id(url: str):
 _ROUTE = {"proxy": None}   # الطريقة اللي نجحت مع يوتيوب، نعيد استخدامها
 
 
-def download_audio(vid, workdir: Path, stem="audio", section_end=None):
-    """يسحب الصوت بس (بدون فيديو). section_end = يسحب من البداية لهذي الثانية بس."""
+def download_audio(vid, workdir: Path, stem="audio", section_end=None, url=None, fmt="bestaudio/best", max_seconds=None):
+    """يسحب الصوت بس (بدون فيديو). للمقاطع السوشل يسحب المقطع نفسه عشان نشغّله."""
     import yt_dlp  # يُستورد هنا عشان السكربت يشتغل حتى لو كان التحميل معطّل
     from yt_dlp.utils import download_range_func
 
-    url = f"https://www.youtube.com/watch?v={vid}"
+    url = url or f"https://www.youtube.com/watch?v={vid}"
     opts = {
-        "format": "bestaudio/best",
+        "format": fmt,
+        "merge_output_format": "mp4",
         "outtmpl": str(workdir / f"{stem}.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
@@ -177,6 +180,8 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None):
             with yt_dlp.YoutubeDL(o) as ydl:
                 info = ydl.extract_info(url, download=False)
                 duration = info.get("duration") or 0
+                if max_seconds and duration and duration > max_seconds:
+                    raise UserError("المقطع أطول من ١٠ دقايق 😅 حطه في خانة الأفلام لو كان من يوتيوب")
                 if duration and duration > MAX_MINUTES * 60:
                     raise UserError(f"الفلم طويل مرة 😅 أطول من {MAX_MINUTES // 60} ساعات")
                 ydl.download([url])
@@ -521,16 +526,23 @@ def parse_translation(text, n):
     return out
 
 
-def translate_batch(segs, system, context):
+def translate_batch(segs, system, context, llm=None, strict=False):
     payload = {
         "سياق_سابق": context,
         "الجمل": [{"i": i, "t": s["src"]} for i, s in enumerate(segs)],
     }
     user = "ترجم هذي الجمل (السياق السابق للفهم فقط، لا تترجمه):\n" + json.dumps(payload, ensure_ascii=False)
     for _ in range(3):
-        result = parse_translation(call_llm(system, user), len(segs))
+        try:
+            result = parse_translation((llm or call_llm)(system, user), len(segs))
+        except Exception:  # noqa: BLE001
+            if strict:
+                raise
+            result = None
         if result and sum(1 for r in result if r is not None) >= len(segs) * 0.8:
             return [r if r is not None else s["src"] for r, s in zip(result, segs)]
+    if strict:
+        raise RuntimeError("ترجمة الخلفية ما ضبطت")
     return [s["src"] for s in segs]   # آخر حل: النص الأصلي بدل ما يضيع
 
 
@@ -580,6 +592,49 @@ def validate_inputs():
 
 
 # ───────────────────────── تشغيل المهمة كاملة ─────────────────────────
+def upload_media(path: Path):
+    """يرفع المقطع (تيك توك/انستا) لـ Cloudflare عشان يشتغل بمشغّلنا."""
+    data = path.read_bytes()
+    if len(data) > 95 * 1024 * 1024:
+        raise UserError("المقطع كبير مرة 😅")
+    req = urllib.request.Request(f"{CALLBACK}/api/media/{JOB_ID}", data=data, method="PUT",
+                                 headers={"X-Ingest-Secret": INGEST_SECRET, "User-Agent": UA, "Content-Type": "video/mp4"})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        r.read()
+
+
+def post_dialect(dialect, segs):
+    body = json.dumps({"segments": segs}, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(f"{CALLBACK}/api/subs/{JOB_ID}/{dialect}", data=body, method="POST",
+                                 headers={"X-Ingest-Secret": INGEST_SECRET, "User-Agent": UA, "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        r.read()
+
+
+def background_dialects(all_segs, title, have):
+    """بعد ما تجهز لهجتك: نترجم باقي اللهجات وانت تتفرج، عشان التبديل يصير فوري.
+    نستخدم Gemini بس هنا، عشان ما ناكل من حد Groq اللي نحتاجه للأفلام الجديدة."""
+    if not GEMINI_API_KEY or not all_segs:
+        return
+    todo = [d for d in BG_ORDER if d != DIALECT and d not in (have or [])]
+    src = [{"start": x["start"], "end": x["end"], "src": x["src"]} for x in all_segs]
+    for d in todo:
+        system = build_system_prompt(d, title)
+        batches = [src[i: i + TRANSLATE_BATCH] for i in range(0, len(src), TRANSLATE_BATCH)]
+        try:
+            with ThreadPoolExecutor(3) as pool:
+                futs = [pool.submit(translate_batch, b, system, [x["src"] for x in batches[i - 1][-3:]] if i else [], call_gemini, True)
+                        for i, b in enumerate(batches)]
+                out = []
+                for b, f in zip(batches, futs):
+                    out += [dict(x, ar=ar) for x, ar in zip(b, f.result())]
+            post_dialect(d, out)
+            print(f"✓ لهجة {d} جاهزة في الخلفية")
+        except Exception as e:  # noqa: BLE001
+            print(f"::warning::وقفنا ترجمة اللهجات الإضافية عند {d}: {str(e)[:200]}")
+            return
+
+
 def fetch_source():
     req = urllib.request.Request(f"{CALLBACK}/api/source/{JOB_ID}",
                                  headers={"X-Ingest-Secret": INGEST_SECRET, "User-Agent": UA})
@@ -619,6 +674,7 @@ def run_reuse():
         )
     pool.shutdown()
     report(status="done", stage="الفلم كله جاهز ✓ استمتع 🎬", progress=1.0, ready_until=10**9)
+    background_dialects([x for k in keys for x in groups[k]], title, (data.get("have") or []) + [DIALECT])
 
 
 def run():
@@ -628,7 +684,14 @@ def run():
     report(status="running", stage="نسحب صوت الفلم 🎧", progress=0.03)
 
     # ١) نسحب الصوت بس (بدون فيديو) — سريع حتى لفلم ساعتين
-    audio, title, duration = download_audio(VIDEO_ID, workdir, stem="audio")
+    if MEDIA_URL:   # مقطع تيك توك/انستا: نسحب المقطع نفسه (صغير) ونشغّله بمشغّلنا
+        audio, title, duration = download_audio(
+            VIDEO_ID, workdir, stem="clip", url=MEDIA_URL, max_seconds=600,
+            fmt="best[ext=mp4][height<=720]/bv*[height<=720][ext=mp4]+ba[ext=m4a]/best[height<=720]/best")
+        report(stage="نجهّز المقطع للعرض 📱", progress=0.05)
+        upload_media(audio)
+    else:
+        audio, title, duration = download_audio(VIDEO_ID, workdir, stem="audio")
     total = max(1, -(-int(duration or CHUNK_SECONDS) // CHUNK_SECONDS))
     report(title=title, duration=duration, aspect=_ROUTE.get("aspect") or 0, stage="نسمع أول ١٠ دقايق ونترجمها ✍️", progress=0.06)
 
@@ -669,6 +732,7 @@ def run():
 
     # ٣) الترجمة تمشي ورا التفريغ قطعة قطعة
     done_chunks, context, pool, pending = 0, [], ThreadPoolExecutor(TRANSLATE_WORKERS), None
+    all_segs = []
     while True:
         kind, val = seg_q.get()
         if kind == "err":
@@ -686,6 +750,7 @@ def run():
                 s["ar"] = ar
         if segs:
             context = [s["src"] for s in segs[-3:]]
+        all_segs += segs
         done_chunks += 1
         report(
             append=segs,
@@ -695,6 +760,7 @@ def run():
         )
     pool.shutdown()
     report(status="done", stage="الفلم كله جاهز ✓ استمتع 🎬", progress=1.0, ready_until=10**9)
+    background_dialects(all_segs, title, [DIALECT])
 
 
 def friendly_error(e):
