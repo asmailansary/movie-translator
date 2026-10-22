@@ -43,6 +43,11 @@ html[data-theme=light] .seg button[aria-pressed=true],html[data-theme=light] .go
 html[data-theme=light] .card{box-shadow:0 1px 2px rgba(60,40,10,.04),0 6px 20px rgba(60,40,10,.05)}
 .logo.custom{background:none;overflow:hidden}
 .logo img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
+.newicon{display:flex;align-items:center;gap:12px;padding-left:34px}
+.newicon img{width:58px;height:58px;border-radius:14px;object-fit:cover;flex:none;box-shadow:0 4px 14px #0004}
+.codebox{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0;background:var(--surface2);border:1px dashed var(--accent);border-radius:12px;padding:10px 12px}
+.codebox span{font:700 22px/1 ui-monospace,Menlo,monospace;letter-spacing:4px;direction:ltr;color:var(--accent)}
+.linkbtn{border:0;background:none;color:var(--accent);font:inherit;font-weight:700;padding:0;text-decoration:underline}
 .themeBtn{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;font-size:19px;flex:none;padding:0}
 .themeBtn span{display:block;transition:transform .5s cubic-bezier(.22,1.4,.36,1)}
 .themeBtn.spin span{transform:rotate(360deg) scale(1.1)}
@@ -327,6 +332,33 @@ body.cinema .not-cinema{display:none!important}
     <p class="note">كذا تفتح بملء الشاشة مثل أي تطبيق، ويوصلك <b>إشعار 🔔</b> أول ما يجهز فلمك حتى لو طلعت منها.</p>
   </section>
 
+  <!-- أيقونة جديدة -->
+  <section class="home-only card tip hidden" id="iconTip">
+    <button class="x" type="button" id="iconKeep" aria-label="إغلاق">×</button>
+    <div class="newicon"><img id="newIconImg" alt=""><div><h3>غيّرنا شكل الأيقونة 🎨</h3><p class="note" style="margin:0">تبي الجديدة تطلع على شاشتك الرئيسية؟</p></div></div>
+    <div id="iconStart"><button class="btn2" type="button" id="iconGo" style="margin-top:12px">يلا نحدّثها ✨</button></div>
+    <div id="iconSteps" class="hidden">
+      <p class="note" style="margin-top:10px">الآيفون ما يسمح نغيّرها لحالنا، بس الموضوع دقيقة وأشياءك محفوظة 🤍</p>
+      <div class="codebox"><span id="myCode">······</span><button class="btn2" type="button" id="copyCode">انسخ رمزك 📋</button></div>
+      <ol>
+        <li>انسخ رمزك 📋 (يحفظ محفوظتك وآخر مشاهداتك)</li>
+        <li>اضغط مطوّل على أيقونة التطبيق ← <b>«حذف التطبيق»</b></li>
+        <li>افتح الرابط في Safari: <button class="linkbtn" type="button" id="copyLink">انسخ الرابط 🔗</button></li>
+        <li>مشاركة <span class="kbd">⬆️</span> ← <b>«إضافة إلى الشاشة الرئيسية»</b></li>
+        <li>افتح التطبيق الجديد والصق الرمز 👋</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- رجّع أشياءك بعد الإضافة من جديد -->
+  <section class="home-only card tip hidden" id="restoreTip">
+    <button class="x" type="button" data-close="restoreTip" aria-label="إغلاق">×</button>
+    <h3>رجعت لنا؟ 👋</h3>
+    <p class="note" style="margin:0 0 10px">إذا معك رمز، الصقه وترجع لك محفوظتك وآخر مشاهداتك.</p>
+    <div class="mv"><input id="restoreCode" dir="ltr" placeholder="مثلاً K7M2QX" maxlength="8" autocapitalize="characters" autocomplete="off"><button class="btn2" type="button" id="restoreGo">رجّعها</button></div>
+    <p class="note err hidden" id="restoreErr"></p>
+  </section>
+
   <!-- إرشاد: تفعيل الإشعارات -->
   <section class="home-only card tip hidden" id="pushTip">
     <button class="x" type="button" data-close="pushTip" aria-label="إغلاق">×</button>
@@ -482,7 +514,8 @@ body.cinema .not-cinema{display:none!important}
   };
   // رمز الجهاز: عشوائي وطويل، ينحفظ في الجوال (بديل كلمة المرور)
   const newDev = () => { const b = crypto.getRandomValues(new Uint8Array(24)); return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
-  let device = store.get("dev", ""); if (!/^[A-Za-z0-9_-]{22,64}$/.test(device)) { device = newDev(); store.set("dev", device); }
+  const freshDevice = !/^[A-Za-z0-9_-]{22,64}$/.test(store.get("dev", ""));
+  let device = store.get("dev", ""); if (freshDevice) { device = newDev(); store.set("dev", device); }
   const api = (path, opts = {}) => fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Device": device, ...(opts.headers || {}) } });
   const fmt = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
     return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
@@ -530,6 +563,7 @@ body.cinema .not-cinema{display:none!important}
     if (store.get("size2", null) == null && s.font_size) { size = s.font_size; applySize(); }
     if (store.get("dialect", null) == null && s.default_dialect) dialect = s.default_dialect;
     if (cfg) renderChips();
+    checkIconTip();
   }
   // ───── ليلي/أبيض (المستخدم يقدر يبدّل بنفسه إذا الأدمن سامح)
   function applyTheme() {
@@ -546,6 +580,42 @@ body.cinema .not-cinema{display:none!important}
     b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin");
     applyTheme();
   });
+  // ───── أيقونة جديدة على الشاشة الرئيسية (Apple ما تسمح نغيّرها تلقائياً)
+  function checkIconTip() {
+    if (!standalone) return;
+    let mine = store.get("iconV", null);
+    if (mine === null) { mine = freshDevice ? (S.icon_v || 0) : 0; store.set("iconV", mine); }
+    const show = (S.icon_v || 0) > mine && !document.body.classList.contains("watching");
+    if (show) $("#newIconImg").src = "/brand/icon-192.png?v=" + (S.icon_v || 0);
+    $("#iconTip").classList.toggle("hidden", !show);
+  }
+  $("#iconKeep").onclick = () => { store.set("iconV", S.icon_v || 0); $("#iconTip").classList.add("hidden"); };
+  $("#iconGo").onclick = async () => {
+    try {
+      const r = await api("/api/handoff/create", { method: "POST", body: JSON.stringify({ recent: store.get("recent2", []) }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error);
+      $("#myCode").textContent = d.code;
+      $("#iconStart").classList.add("hidden"); $("#iconSteps").classList.remove("hidden");
+    } catch (err) { toast(err.message || "ما ضبط 😕 جرّب مرة ثانية"); }
+  };
+  const copy = async (text, btn, done) => { try { await navigator.clipboard.writeText(text); const o = btn.textContent; btn.textContent = done; setTimeout(() => btn.textContent = o, 1800); } catch { prompt("انسخ من هنا:", text); } };
+  $("#copyCode").onclick = () => copy($("#myCode").textContent, $("#copyCode"), "تم ✓");
+  $("#copyLink").onclick = () => copy(location.origin, $("#copyLink"), "انسخ ✓");
+
+  if (standalone && freshDevice) $("#restoreTip").classList.remove("hidden");
+  $("#restoreGo").onclick = async () => {
+    $("#restoreErr").classList.add("hidden");
+    try {
+      const r = await api("/api/handoff/claim", { method: "POST", body: JSON.stringify({ code: $("#restoreCode").value }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error);
+      device = d.device; store.set("dev", device); $("#devCode").value = device;
+      const mine = store.get("recent2", []), seen = new Set(mine.map(x => x.vid));
+      store.set("recent2", [...mine, ...(d.recent || []).filter(x => !seen.has(x.vid))].slice(0, 12));
+      store.set("iconV", S.icon_v || 0);
+      $("#restoreTip").classList.add("hidden"); renderRecent(); loadFavs();
+      toast("رجعت أشياءك ✓ حياك 🤍");
+    } catch (err) { $("#restoreErr").textContent = err.message; $("#restoreErr").classList.remove("hidden"); }
+  };
   const CLIP_INTRO_DEFAULT = "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨";
   // نفس الكلام بس للمقاطع: «المقطع» بدل «الفلم»
   const word = t => (job?.kind === "clip" ? String(t).replace(/فلمك/g, "مقطعك").replace(/الفلم/g, "المقطع").replace(/فلم /g, "مقطع ") : t);

@@ -503,6 +503,37 @@ async function edgeStep(request, env, id, ctx) {
   return json({ window: w, segments: out, windows_done: fresh.windows_done, total, done: fresh.status === "done", stage: fresh.stage, progress: fresh.progress });
 }
 
+// ───────── رمز النقل: يحفظ أشياء المستخدم قبل ما يحذف التطبيق ويضيفه من جديد ─────────
+const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";   // بدون الحروف اللي تتلخبط (O/0، I/1)
+const claimFails = new Map();
+async function handoff(request, env, action) {
+  let b = {};
+  try { b = JSON.parse((await request.text()).slice(0, 60000) || "{}"); } catch {}
+  if (action === "create") {
+    const dev = deviceOf(request);
+    if (!dev) return noDevice();
+    const bytes = crypto.getRandomValues(new Uint8Array(6));
+    const code = [...bytes].map((x) => CODE_CHARS[x % CODE_CHARS.length]).join("");
+    const recent = Array.isArray(b.recent) ? b.recent.slice(0, 12) : [];
+    await putJSON(env, `handoff/${code}.json`, { dev, recent, exp: Date.now() + 3 * 864e5 });
+    return json({ code, days: 3 });
+  }
+  if (action === "claim") {
+    const ip = request.headers.get("cf-connecting-ip") || "x";
+    const f = claimFails.get(ip) || 0;
+    if (f >= 10) return json({ error: "محاولات كثيرة 😅 جرّب بعد شوي" }, 429);
+    const code = String(b.code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const h = code.length === 6 ? await getJSON(env, `handoff/${code}.json`) : null;
+    if (!h || h.exp < Date.now()) {
+      claimFails.set(ip, f + 1); await sleep(700);
+      return json({ error: "الرمز غلط أو انتهى 🤔" }, 404);
+    }
+    await env.BUCKET.delete(`handoff/${code}.json`);
+    return json({ device: h.dev, recent: h.recent || [] });
+  }
+  return json({ error: "غير موجود" }, 404);
+}
+
 // ───────── المستخدمين (تمهيداً لإرسال إشعارات للكل لاحقاً) ─────────
 // نحفظ بس رمز الجهاز العشوائي وتواريخ الاستخدام، بدون أي معلومات شخصية
 async function hello(request, env) {
@@ -650,6 +681,8 @@ export default {
       m = path.match(/^\/api\/edge\/([a-f0-9]{12})$/);
       if (m && request.method === "POST") return edgeStep(request, env, m[1], ctx);
       if (path === "/api/hello" && request.method === "POST") return hello(request, env);
+      m = path.match(/^\/api\/handoff\/(create|claim)$/);
+      if (m && request.method === "POST") return handoff(request, env, m[1]);
       if (path === "/api/settings" && request.method === "GET") return json(publicSettings(await getSettings(env)));
       m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast)$/);
       if (m) return adminApi(request, env, ctx, m[1], safeEqual);
