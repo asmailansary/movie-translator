@@ -197,6 +197,7 @@ input[type=url]{direction:ltr;text-align:left}
 .cb.seek b{position:absolute;font-size:11px;font-weight:700;top:52%;left:50%;transform:translate(-50%,-50%)}
 .stage:not(.started) .ctl .top,.stage:not(.started) .ctl .bottom,.stage:not(.started) .cb.seek{visibility:hidden}
 .stage:not(.started) .ctl .cb.big{pointer-events:none}
+.stage.yt:not(.started) .ctl .cb.big{visibility:hidden}
 .row2{display:flex;align-items:center;gap:12px;direction:ltr}
 .time{font-size:12px;color:#ddd;font-variant-numeric:tabular-nums;min-width:86px}
 .row2 .sp{flex:1}
@@ -974,6 +975,7 @@ body.cinema .not-cinema{display:none!important}
   }
 
   function loadVideo(vid, at) {
+    stage.classList.toggle("yt", !(job && job.platform !== "youtube"));
     if (job && job.platform !== "youtube") {   // تيك توك/انستا: مشغّلنا الخاص
       freshHost(); player = nativePlayer(at); return;
     }
@@ -1012,6 +1014,7 @@ body.cinema .not-cinema{display:none!important}
   const playing = () => { try { return player?.getPlayerState?.() === 1; } catch { return false; } };
   function onState(e) {
     const st = e.data;
+    if (st === 1 && !openerOn && wantOpener()) { playOpener(true); return; }
     if (st === 1 && openerOn) { try { player.pauseVideo(); if (holdAt != null) player.seekTo(holdAt, true); } catch {} return; }
     if (openerOn && st === 2) return;
     // أول ما يشتغل الفلم الأزرار تختفي، والمستخدم يلمس الشاشة لو بغاها (يتناسق مع الانترو)
@@ -1043,7 +1046,16 @@ body.cinema .not-cinema{display:none!important}
     const src = "/brand/intro?v=" + (S.intro_v || 0);
     if (ov.getAttribute("src") !== src) { ov.src = src; ov.load(); }
   }
-  function playOpener() {
+  // أي لمسة داخل صفحتنا تجهّز فيديو الانترو عشان الآيفون يسمح يشغّله بصوت بعدين
+  let primedSrc = "";
+  function primeOpener() {
+    if (!document.body.classList.contains("watching") || openerOn || !wantOpener()) return;
+    prepOpener();
+    const src = ov.getAttribute("src"); if (!src || primedSrc === src) return;
+    primedSrc = src;
+    try { const p = ov.play(); ov.pause(); p?.catch?.(() => { primedSrc = ""; }); } catch { primedSrc = ""; }
+  }
+  function playOpener(fromFilm) {
     openerOn = true; openerDone = true;
     if (S.intro_every === "daily") store.set("openerDay", dayStamp());
     prepOpener();
@@ -1054,8 +1066,8 @@ body.cinema .not-cinema{display:none!important}
       if (S.intro_skip !== false) setTimeout(() => openerOn && opener.classList.add("canskip"), 2000);
     }).catch(() => endOpener());
     // نشغّل الفلم بنفس اللمسة (عشان الآيفون يسمح له يكمل بعدين) ونوقفه تحت الانترو بدون صوت
-    holdAt = now();
-    try { player.mute?.(); player.playVideo(); } catch {}
+    holdAt = fromFilm ? Math.max(0, now() - 0.3) : now();
+    try { if (fromFilm) { player.pauseVideo(); player.seekTo(holdAt, true); } else { player.mute?.(); player.playVideo(); } } catch {}
     clearTimeout(openerSafety); openerSafety = setTimeout(endOpener, 30000);
   }
   function endOpener() {
@@ -1136,6 +1148,7 @@ body.cinema .not-cinema{display:none!important}
       const i = findSeg(t);
       const waiting = i < 0 && playing() && (edgeMode ? !doneWins.has(Math.floor(Math.max(0, t) / WIN)) : (t > readyUntil && readyUntil < 1e8));
       const key = waiting ? -3 : i;
+      if (!openerOn && playing() && !stage.classList.contains("started")) onState({ data: 1 });
       if (key !== lastIdx) { lastIdx = key; render(i >= 0 ? segs[i] : null, waiting); }
       if (ts - lastBar > 250 && !dragging) {
         lastBar = ts;
@@ -1213,7 +1226,7 @@ body.cinema .not-cinema{display:none!important}
   }
   clearBadge();
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") clearBadge(); });
-  const unlockAudio = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); loadTap(); } catch {} };
+  const unlockAudio = () => { try { primeOpener(); } catch {} try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); loadTap(); } catch {} };
   ["touchend", "click"].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
   function chime() {
     if (!actx || store.get("mute", false)) return;
