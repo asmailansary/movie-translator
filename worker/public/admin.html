@@ -140,6 +140,14 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
         <button type="button" data-v="light">أبيض ☀️</button>
         <button type="button" data-v="auto">حسب الجوال 📱</button>
       </div>
+      <p class="note">هذا الوضع الافتراضي للمستخدمين.</p>
+      <div class="row" style="margin-top:6px"><div class="lbl">زر ليلي/أبيض للمستخدم 🌙☀️<small>يقدر يبدّل بنفسه من داخل التطبيق</small></div><label class="sw"><input type="checkbox" id="s_user_theme_toggle"><i></i></label></div>
+    </div>
+    <div class="card">
+      <h2>الإحساس ✨</h2>
+      <div class="row"><div class="lbl">صوت النقر 🔊<small>صوت خفيف مع كل ضغطة (يسكت لو الجوال صامت)</small></div><label class="sw"><input type="checkbox" id="s_tap_sound"><i></i></label></div>
+      <label class="f">مدة شاشة الافتتاح: <b id="splashV"></b></label>
+      <input type="range" id="s_splash_ms" min="300" max="6000" step="100" style="width:100%;accent-color:var(--accent)">
     </div>
     <div class="card">
       <h2>لون الأداة 🎨</h2>
@@ -181,8 +189,7 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
   <section class="pane hidden" data-pane="push">
     <div class="card">
       <h2>إشعار لكل المستخدمين 📣</h2>
-      <label class="f">العنوان</label>
-      <input type="text" id="b_title" maxlength="80" placeholder="مثلاً: ميزة جديدة 🎉">
+      <p class="note" style="margin:-6px 0 8px">يطلع باسم التطبيق والنص بس، بدون عنوان ✨</p>
       <label class="f">النص</label>
       <textarea id="b_body" maxlength="240" placeholder="اكتب رسالتك…"></textarea>
       <button class="btn" type="button" id="sendBroadcast" style="margin-top:12px">إرسال 🚀</button>
@@ -338,7 +345,9 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     for (const k of ["name", "tagline", "splash", "announcement", "snap_url", "maintenance_msg", "daily_per_device", "daily_total", "font_size"]) {
       const el = $("#s_" + k); el.value = val(k) ?? ""; el.oninput = () => set(k, el.type === "number" ? +el.value : el.value);
     }
-    for (const k of ["show_social", "show_dub", "show_snap", "maintenance"]) { const el = $("#s_" + k); el.checked = Boolean(val(k)); el.onchange = () => set(k, el.checked); }
+    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
+    const sp = $("#s_splash_ms"), spv = () => { $("#splashV").textContent = (val("splash_ms") / 1000).toFixed(1) + " ثانية"; };
+    sp.value = val("splash_ms"); spv(); sp.oninput = () => { set("splash_ms", +sp.value); spv(); };
     // اللهجات
     const en = val("dialects_enabled");
     $("#dialChips").innerHTML = ""; $("#defChips").innerHTML = "";
@@ -408,12 +417,12 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
 
   // ───── إشعار للكل
   $("#sendBroadcast").onclick = async () => {
-    const title = $("#b_title").value.trim(), body = $("#b_body").value.trim();
-    if (!title || !body) return toast("اكتب العنوان والنص ✍️");
-    if (!confirm(`نرسل «${title}» لكل المستخدمين المفعّلين للتنبيهات؟`)) return;
-    const r = await api("broadcast", { method: "POST", body: JSON.stringify({ title, body }) }); const d = await r.json();
+    const body = $("#b_body").value.trim();
+    if (!body) return toast("اكتب نص الإشعار ✍️");
+    if (!confirm("نرسل هالإشعار لكل المستخدمين المفعّلين للتنبيهات؟")) return;
+    const r = await api("broadcast", { method: "POST", body: JSON.stringify({ body }) }); const d = await r.json();
     if (!r.ok) return toast(d.error || "ما انرسل 😕");
-    toast(`انرسل لـ ${d.devices} جهاز 🚀`); $("#b_title").value = ""; $("#b_body").value = "";
+    toast(`انرسل لـ ${d.devices} جهاز 🚀`); $("#b_body").value = "";
   };
 })();
 </script>

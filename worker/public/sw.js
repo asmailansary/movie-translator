@@ -5,7 +5,8 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener("push", (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { title: "فهّمني", body: e.data ? e.data.text() : "" }; }
-  e.waitUntil(self.registration.showNotification(d.title || "فهّمني", {
+  // إذا الإشعار بدون عنوان، نخليه فاضي: الآيفون يعرض اسم التطبيق والنص بس
+  e.waitUntil(self.registration.showNotification(typeof d.title === "string" ? d.title : "فهّمني", {
     body: d.body || "",
     icon: "/icon-192.png",
     badge: "/icon-192.png",

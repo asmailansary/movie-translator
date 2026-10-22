@@ -11,6 +11,9 @@ export const DEFAULT_SETTINGS = {
   tagline: "أي فلم أو مقطع… نفهّمك إياه بلهجتك 🍿",
   splash: "نفهّمك أي فلم بلهجتك 🍿",
   theme: "dark",            // dark | light | auto
+  user_theme_toggle: true,  // زر ليلي/أبيض للمستخدم
+  splash_ms: 1700,          // مدة شاشة الافتتاح
+  tap_sound: true,          // صوت النقر
   accent: "#e0a84a",
   icon_v: 0,                // يزيد كل ما تغيّرت الأيقونة
   snap_url: "https://snapchat.com/t/T4QBeB0D",
@@ -72,7 +75,8 @@ function clean(input, current) {
     const u = str(input.snap_url, 200);
     out.snap_url = /^https:\/\/([a-z0-9-]+\.)*snapchat\.com\//i.test(u) ? u : current.snap_url;
   }
-  for (const k of ["show_social", "show_dub", "show_snap", "maintenance"]) if (k in input) out[k] = bool(input[k]);
+  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound"]) if (k in input) out[k] = bool(input[k]);
+  if ("splash_ms" in input) out.splash_ms = int(input.splash_ms, 300, 6000, current.splash_ms);
   if ("dialects_enabled" in input && Array.isArray(input.dialects_enabled)) {
     const list = input.dialects_enabled.filter((d) => DIALECT_KEYS.includes(d));
     if (list.length) out.dialects_enabled = list;
@@ -206,8 +210,9 @@ export async function adminApi(request, env, ctx, action, safeEqual) {
   if (action === "broadcast" && request.method === "POST") {
     let b;
     try { b = JSON.parse((await request.text()).slice(0, 3000)); } catch { return json({ error: "طلب غير صالح" }, 400); }
+    // بدون عنوان: الآيفون يعرض اسم التطبيق والنص بس (أنظف)
     const title = String(b.title || "").slice(0, 80).trim(), body = String(b.body || "").slice(0, 240).trim();
-    if (!title || !body) return json({ error: "اكتب العنوان والنص ✍️" }, 400);
+    if (!body) return json({ error: "اكتب نص الإشعار ✍️" }, 400);
     const devices = await allPushDevices(env);
     const origin = new URL(request.url).origin;
     ctx.waitUntil(notifyAll(env, { title, body, url: "/" }, origin, devices).catch(() => {}));
