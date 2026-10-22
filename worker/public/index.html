@@ -1118,6 +1118,13 @@ body.cinema .not-cinema{display:none!important}
   document.addEventListener("pointerdown", e => {
     if (e.target.closest("button, .snap, .ibtn, summary")) tapSound();
   }, { passive: true });
+  // ───── أول ما يفتح التطبيق: نصفّر رقم الإشعارات اللي على الأيقونة
+  async function clearBadge() {
+    try { await (await caches.open("mt-badge")).put("/__badge", new Response("0")); } catch {}
+    try { await navigator.clearAppBadge?.(); } catch {}
+  }
+  clearBadge();
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") clearBadge(); });
   const unlockAudio = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); loadTap(); } catch {} };
   ["touchend", "click"].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
   function chime() {
