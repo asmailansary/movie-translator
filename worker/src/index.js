@@ -12,7 +12,7 @@
 
 import { getVapid, saveSub, removeSub, notifyAll, validSubscription } from "./push.js";
 import { WINDOW, systemPrompt, translateLines } from "./edge.js";
-import { adminApi, getSettings, publicSettings, serveIcon, serveManifest, serveTap, serveIntro } from "./admin.js";
+import { adminApi, getSettings, publicSettings, serveIcon, serveManifest, serveTap, serveIntro, personKey, getOwners } from "./admin.js";
 
 const LANGS = { auto: "تلقائي", en: "الإنجليزية", de: "الألمانية", fr: "الفرنسية" };
 const DIALECTS = {
@@ -529,6 +529,8 @@ async function handoff(request, env, action) {
       return json({ error: "الرمز غلط أو انتهى 🤔" }, 404);
     }
     await env.BUCKET.delete(`handoff/${code}.json`);
+    const cur = deviceOf(request);
+    if (cur && cur !== h.dev) await env.BUCKET.delete(userKey(cur, "profile.json"));
     return json({ device: h.dev, recent: h.recent || [] });
   }
   return json({ error: "غير موجود" }, 404);
@@ -544,8 +546,13 @@ async function hello(request, env) {
   const key = userKey(dev, "profile.json");
   const p = (await getJSON(env, key)) || { first: Date.now(), visits: 0 };
   const today = new Date().toISOString().slice(0, 10);
-  if (p.lastDay !== today) {   // مرة وحدة باليوم بس، عشان ما نكثر الكتابة
-    Object.assign(p, { last: Date.now(), lastDay: today, visits: (p.visits || 0) + 1, app: Boolean(b.app), push: Boolean(b.push) });
+  const pk = await personKey(request, env);
+  const pks = p.pks || [];
+  if (p.lastDay !== today || !pks.includes(pk) || (Boolean(b.app) && !p.app)) {   // نكتب بس لو تغيّر شي (مرة باليوم تقريباً)
+    if (!pks.includes(pk)) p.pks = [pk, ...pks].slice(0, 6);
+    if (p.lastDay !== today) { p.visits = (p.visits || 0) + 1; p.lastDay = today; }
+    Object.assign(p, { last: Date.now(), app: Boolean(p.app || b.app), push: Boolean(b.push) });
+    if (!p.owner && (await getOwners(env)).pks.some((k) => p.pks.includes(k))) p.owner = true;   // أجهزة صاحب التطبيق ما تنحسب
     await putJSON(env, key, p);
   }
   return json({ ok: true });
@@ -684,7 +691,7 @@ export default {
       m = path.match(/^\/api\/handoff\/(create|claim)$/);
       if (m && request.method === "POST") return handoff(request, env, m[1]);
       if (path === "/api/settings" && request.method === "GET") return json(publicSettings(await getSettings(env)));
-      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast|tap|tap-reset|intro|intro-reset)$/);
+      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast|tap|tap-reset|intro|intro-reset|stats-reset)$/);
       if (m) return adminApi(request, env, ctx, m[1], safeEqual);
       if (path === "/brand/tap") return serveTap(env);
       if (path === "/brand/intro" && (request.method === "GET" || request.method === "HEAD")) return serveIntro(request, env);

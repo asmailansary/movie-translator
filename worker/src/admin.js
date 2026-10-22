@@ -116,6 +116,27 @@ export function publicSettings(s) {
   return pub;
 }
 
+// ───────── نفس الشخص؟ ─────────
+// الآيفون يعطي Safari والتطبيق المثبّت تخزين منفصل، وكل إعادة تثبيت = جهاز جديد.
+// فنربط الأجهزة اللي جت من نفس الشبكة ونفس نوع الجوال برمز مشفّر (ما نحفظ الـIP نفسه أبداً)
+export async function personKey(request, env) {
+  const ip = request.headers.get("cf-connecting-ip") || "";
+  const net = ip.includes(":") ? ip.split(":").slice(0, 4).join(":") : ip.split(".").slice(0, 3).join(".");
+  const ua = (request.headers.get("user-agent") || "").replace(/Version\/[\d.]+|Safari\/[\d.]+|Mobile\/\w+/g, "").slice(0, 200);
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.INGEST_SECRET || env.ADMIN_KEY || "fhm"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(net + "|" + ua)));
+  return [...sig.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+export async function getOwners(env) {
+  return (await (await env.BUCKET.get("config/owners.json"))?.json()) || { pks: [] };
+}
+async function addOwnerPk(env, pk) {
+  const o = await getOwners(env);
+  if (o.pks.includes(pk)) return;
+  o.pks = [pk, ...o.pks].slice(0, 50);
+  await env.BUCKET.put("config/owners.json", JSON.stringify(o), { httpMetadata: { contentType: "application/json" } });
+}
+
 // ───────── الدخول ─────────
 const fails = new Map();   // محاولات الدخول الغلط لكل IP (في الذاكرة)
 async function checkAdmin(request, env, safeEqual) {
@@ -132,20 +153,37 @@ async function checkAdmin(request, env, safeEqual) {
 
 // ───────── الإحصائيات ─────────
 async function stats(env) {
-  let cursor, users = 0, app = 0, withPush = 0, active7 = 0, today = 0, translations = 0, clips = 0;
+  let cursor, translations = 0, clips = 0;
   const week = Date.now() - 7 * 864e5, day = new Date().toISOString().slice(0, 10);
-  const pushDevices = new Set();
+  const pushDevices = new Set(), profiles = [];
+  const owners = new Set((await getOwners(env)).pks);
   do {
     const list = await env.BUCKET.list({ prefix: "users/", cursor, limit: 1000 });
     for (const o of list.objects || []) {
       if (o.key.endsWith("/subs.json") && o.size > 2) pushDevices.add(o.key.split("/")[1]);
       if (!o.key.endsWith("/profile.json")) continue;
       const p = await (await env.BUCKET.get(o.key))?.json();
-      users++; if (p?.app) app++; if ((p?.last || 0) > week) active7++; if (p?.lastDay === day) today++;
+      if (p) profiles.push({ dev: o.key.split("/")[1], ...p });
     }
     cursor = list.truncated ? list.cursor : undefined;
   } while (cursor);
-  withPush = pushDevices.size;
+  // نجمع الأجهزة اللي تشترك برمز شخص (Safari + التطبيق + إعادات التثبيت = شخص واحد)
+  const parent = profiles.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const byPk = new Map();
+  profiles.forEach((p, i) => (p.pks || []).forEach((k) => { if (byPk.has(k)) parent[find(i)] = find(byPk.get(k)); else byPk.set(k, i); }));
+  const groups = new Map();
+  profiles.forEach((p, i) => { const g = find(i); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(p); });
+  let users = 0, app = 0, withPush = 0, active7 = 0, today = 0, mine = 0;
+  for (const g of groups.values()) {
+    if (g.some((p) => p.owner || (p.pks || []).some((k) => owners.has(k)))) { mine += g.length; continue; }
+    users++;
+    if (g.some((p) => p.app)) app++;
+    if (g.some((p) => (p.last || 0) > week)) active7++;
+    if (g.some((p) => p.lastDay === day)) today++;
+    if (g.some((p) => pushDevices.has(p.dev))) withPush++;
+  }
+  cursor = undefined;
   cursor = undefined;
   do {
     const list = await env.BUCKET.list({ prefix: "subs/v2/", cursor, limit: 1000 });
@@ -160,7 +198,7 @@ async function stats(env) {
     for (const o of list.objects || []) storage += o.size || 0;
     cursor = list.truncated ? list.cursor : undefined;
   } while (cursor);
-  return { users, app, withPush, active7, today, translations, clips, newToday: lim?.total || 0, storageMB: Math.round(storage / 1048576 * 10) / 10 };
+  return { users, app, withPush, active7, today, mine, translations, clips, newToday: lim?.total || 0, storageMB: Math.round(storage / 1048576 * 10) / 10 };
 }
 
 async function allPushDevices(env) {
@@ -185,7 +223,18 @@ export async function adminApi(request, env, ctx, action, safeEqual) {
   if (auth !== "ok") return json({ error: "كلمة السر غلط 🔒" }, 401);
 
   if (action === "login") return json({ ok: true });
+  if (action === "login" || action === "stats") { try { await addOwnerPk(env, await personKey(request, env)); } catch {} }
   if (action === "stats") return json(await stats(env));
+  if (action === "stats-reset" && request.method === "POST") {
+    let cursor;
+    do {
+      const list = await env.BUCKET.list({ prefix: "users/", cursor, limit: 1000 });
+      const keys = (list.objects || []).map((o) => o.key).filter((k) => k.endsWith("/profile.json"));
+      if (keys.length) await env.BUCKET.delete(keys);
+      cursor = list.truncated ? list.cursor : undefined;
+    } while (cursor);
+    return json({ ok: true });
+  }
   if (action === "settings" && request.method === "GET") return json(await getSettings(env));
   if (action === "settings" && request.method === "POST") {
     let input;
