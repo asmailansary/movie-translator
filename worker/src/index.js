@@ -12,7 +12,7 @@
 
 import { getVapid, saveSub, removeSub, notifyAll, validSubscription } from "./push.js";
 import { WINDOW, systemPrompt, translateLines } from "./edge.js";
-import { adminApi, getSettings, publicSettings, serveIcon, serveManifest, serveTap } from "./admin.js";
+import { adminApi, getSettings, publicSettings, serveIcon, serveManifest, serveTap, serveIntro } from "./admin.js";
 
 const LANGS = { auto: "تلقائي", en: "الإنجليزية", de: "الألمانية", fr: "الفرنسية" };
 const DIALECTS = {
@@ -684,9 +684,10 @@ export default {
       m = path.match(/^\/api\/handoff\/(create|claim)$/);
       if (m && request.method === "POST") return handoff(request, env, m[1]);
       if (path === "/api/settings" && request.method === "GET") return json(publicSettings(await getSettings(env)));
-      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast|tap|tap-reset)$/);
+      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast|tap|tap-reset|intro|intro-reset)$/);
       if (m) return adminApi(request, env, ctx, m[1], safeEqual);
       if (path === "/brand/tap") return serveTap(env);
+      if (path === "/brand/intro" && (request.method === "GET" || request.method === "HEAD")) return serveIntro(request, env);
       m = path.match(/^\/brand\/icon-(180|192|512)\.png$/);
       if (m) return serveIcon(request, env, m[1]);
       if (path === "/app.webmanifest") return serveManifest(env);

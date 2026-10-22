@@ -81,6 +81,8 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
 .colors button{width:38px;height:38px;border-radius:50%;border:3px solid transparent}
 .colors button[aria-pressed=true]{border-color:var(--text)}
 .colors input[type=color]{width:44px;height:40px;border:0;background:none;padding:0}
+.upbar{height:6px;border-radius:9px;background:#ffffff1a;overflow:hidden;margin:6px 0 10px}
+.upbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .bgs{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .bgs button{width:58px;height:58px;border-radius:16px;border:3px solid transparent;display:grid;place-items:end center;padding-bottom:4px;font-size:10px;color:#fff9}
 .bgs button[aria-pressed=true]{border-color:var(--accent)}
@@ -167,6 +169,24 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
       <input type="range" id="s_tap_volume" min="0" max="100" step="5" style="width:100%;accent-color:var(--accent)">
       <label class="f">مدة شاشة الافتتاح: <b id="splashV"></b></label>
       <input type="range" id="s_splash_ms" min="300" max="6000" step="100" style="width:100%;accent-color:var(--accent)">
+    </div>
+    <div class="card">
+      <h2>الانترو 🎬</h2>
+      <p class="note" style="margin-top:0">توقيعك يطلع قبل كل فلم، وبعده يبدأ الفلم بنعومة كأنه جزء منه.</p>
+      <div class="row"><div class="lbl">شغّل الانترو<small id="introState"></small></div><label class="sw"><input type="checkbox" id="s_intro_on"><i></i></label></div>
+      <video id="introPrev" class="hidden" playsinline controls preload="metadata" style="width:100%;border-radius:14px;background:#000;margin:8px 0;max-height:240px"></video>
+      <div class="upbar hidden" id="introBar"><i id="introFill"></i></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn sec" type="button" id="pickIntro" style="flex:2">ارفع انترو من جوالك</button>
+        <button class="btn danger" type="button" id="resetIntro" style="flex:1">احذفه</button>
+      </div>
+      <input type="file" id="introFile" accept="video/mp4,video/quicktime,video/*" class="hidden">
+      <label class="f">متى يطلع؟</label>
+      <div class="seg" id="introEvery"><button type="button" data-v="always">قبل كل فلم</button><button type="button" data-v="daily">مرة باليوم</button></div>
+      <label class="f">وين يطلع؟</label>
+      <div class="seg" id="introWhere"><button type="button" data-v="all">الأفلام والمقاطع</button><button type="button" data-v="films">الأفلام بس</button></div>
+      <div class="row" style="margin-top:6px"><div class="lbl">زر «تخطّي»<small>يطلع بعد ثانيتين</small></div><label class="sw"><input type="checkbox" id="s_intro_skip"><i></i></label></div>
+      <p class="note">💡 الأحلى انترو ٣-٨ ثواني بخلفية سودا أو بلون خلفية التطبيق، عشان يذوب في الفلم. أقصى حجم ٣٠ ميقا.</p>
     </div>
     <div class="card">
       <h2>لون الأداة 🎨</h2>
@@ -382,11 +402,21 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     for (const k of ["name", "tagline", "splash", "announcement", "snap_url", "maintenance_msg", "daily_per_device", "daily_total", "font_size"]) {
       const el = $("#s_" + k); el.value = val(k) ?? ""; el.oninput = () => set(k, el.type === "number" ? +el.value : el.value);
     }
-    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
+    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_skip"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
     const sp = $("#s_splash_ms"), spv = () => { $("#splashV").textContent = (val("splash_ms") / 1000).toFixed(1) + " ثانية"; };
     sp.value = val("splash_ms"); spv(); sp.oninput = () => { set("splash_ms", +sp.value); spv(); };
     const tv = $("#s_tap_volume"), tvv = () => { $("#tapVolV").textContent = val("tap_volume") + "٪"; };
     tv.value = val("tap_volume"); tvv(); tv.oninput = () => { set("tap_volume", +tv.value); tvv(); };
+    // الانترو
+    const io = $("#s_intro_on"); io.checked = !!val("intro_on"); io.disabled = !S.custom_intro;
+    io.onchange = () => set("intro_on", io.checked);
+    $("#introState").textContent = S.custom_intro ? (val("intro_on") ? "شغّال ✓" : "مرفوع بس مطفّي") : "ارفع انترو أول";
+    $("#resetIntro").classList.toggle("hidden", !S.custom_intro);
+    const ip = $("#introPrev"), isrc = "/brand/intro?v=" + (S.intro_v || 0);
+    ip.classList.toggle("hidden", !S.custom_intro);
+    if (S.custom_intro && ip.dataset.src !== isrc) { ip.dataset.src = isrc; ip.src = isrc; }
+    for (const [id, k] of [["#introEvery", "intro_every"], ["#introWhere", "intro_where"]])
+      document.querySelectorAll(id + " button").forEach(b => { b.setAttribute("aria-pressed", String(b.dataset.v === val(k))); b.onclick = () => { set(k, b.dataset.v); render(); }; });
     $("#tapName").textContent = S.custom_tap ? "(صوتك ✓)" : "(الأصلي)";
     $("#resetTap").classList.toggle("hidden", !S.custom_tap);
     // اللهجات
@@ -490,6 +520,32 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     if (!confirm("ترجّع صوت النقر الأصلي؟")) return;
     const r = await api("tap-reset", { method: "POST" }); const d = await r.json();
     if (r.ok) { S = d.settings; render(); toast("رجع الصوت الأصلي ✓"); }
+  };
+
+  // ───── الانترو (يترفع خام مع شريط تقدّم)
+  $("#pickIntro").onclick = () => $("#introFile").click();
+  $("#introFile").onchange = () => {
+    const f = $("#introFile").files[0]; $("#introFile").value = ""; if (!f) return;
+    const type = /^video\/(mp4|quicktime|x-m4v)$/.test(f.type) ? f.type : /\.mov$/i.test(f.name) ? "video/quicktime" : /\.(mp4|m4v)$/i.test(f.name) ? "video/mp4" : "";
+    if (!type) return toast("لازم فيديو mp4 أو mov 🎬");
+    if (f.size > 30 * 1024 * 1024) return toast("الانترو كبير 😅 خله أقل من ٣٠ ميقا");
+    const bar = $("#introBar"), fill = $("#introFill"); bar.classList.remove("hidden"); fill.style.width = "0";
+    $("#pickIntro").disabled = true;
+    const x = new XMLHttpRequest(); x.open("POST", "/api/admin/intro");
+    x.setRequestHeader("x-admin-key", key); x.setRequestHeader("content-type", type);
+    x.upload.onprogress = e => { if (e.lengthComputable) fill.style.width = (e.loaded / e.total * 100).toFixed(0) + "%"; };
+    x.onloadend = () => {
+      $("#pickIntro").disabled = false; bar.classList.add("hidden");
+      let d = {}; try { d = JSON.parse(x.responseText); } catch {}
+      if (x.status === 200 && d.settings) { S = d.settings; delete draft.intro_on; render(); toast("تم ✓ صار عندك انترو 🎬"); }
+      else toast(d.error || "ما قدرنا نرفعه 😕 جرّب مرة ثانية");
+    };
+    x.send(f);
+  };
+  $("#resetIntro").onclick = async () => {
+    if (!confirm("تحذف الانترو؟")) return;
+    const r = await api("intro-reset", { method: "POST" }); const d = await r.json();
+    if (r.ok) { S = d.settings; delete draft.intro_on; $("#introPrev").removeAttribute("src"); $("#introPrev").dataset.src = ""; render(); toast("انحذف الانترو ✓"); }
   };
 
   // ───── إشعار للكل

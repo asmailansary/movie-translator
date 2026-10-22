@@ -17,6 +17,12 @@ export const DEFAULT_SETTINGS = {
   tap_volume: 60,           // ارتفاع صوت النقر (٠-١٠٠)
   custom_tap: false,        // صوت نقر مرفوع من الأدمن؟
   tap_v: 0,
+  intro_on: false,          // انترو قبل الفلم
+  custom_intro: false,      // فيه انترو مرفوع؟
+  intro_v: 0,
+  intro_every: "always",    // always = قبل كل فلم، daily = مرة باليوم لكل جهاز
+  intro_where: "all",       // all = الأفلام والمقاطع، films = الأفلام بس
+  intro_skip: true,         // زر «تخطّي»
   accent: "#e0a84a",
   dark_bg: "#0d0b09",       // لون خلفية الوضع الليلي
   icon_v: 0,                // يزيد كل ما تغيّرت الأيقونة
@@ -81,7 +87,9 @@ function clean(input, current) {
     const u = str(input.snap_url, 200);
     out.snap_url = /^https:\/\/([a-z0-9-]+\.)*snapchat\.com\//i.test(u) ? u : current.snap_url;
   }
-  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound"]) if (k in input) out[k] = bool(input[k]);
+  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_on", "intro_skip"]) if (k in input) out[k] = bool(input[k]);
+  if (input.intro_every === "always" || input.intro_every === "daily") out.intro_every = input.intro_every;
+  if (input.intro_where === "all" || input.intro_where === "films") out.intro_where = input.intro_where;
   if ("tap_volume" in input) out.tap_volume = int(input.tap_volume, 0, 100, current.tap_volume);
   if ("splash_ms" in input) out.splash_ms = int(input.splash_ms, 300, 6000, current.splash_ms);
   if ("dialects_enabled" in input && Array.isArray(input.dialects_enabled)) {
@@ -226,6 +234,27 @@ export async function adminApi(request, env, ctx, action, safeEqual) {
     cache = { at: 0, value: null };
     return json({ ok: true, settings: next });
   }
+  if (action === "intro" && request.method === "POST") {
+    // الفيديو يجي خام (مو FormData) عشان ما ينحمل كله في الذاكرة
+    const type = (request.headers.get("content-type") || "").split(";")[0].trim();
+    const size = +request.headers.get("content-length") || 0;
+    if (!/^video\/(mp4|quicktime|x-m4v)$/.test(type)) return json({ error: "لازم فيديو mp4 أو mov 🎬" }, 400);
+    if (!size || size > INTRO_MAX) return json({ error: "الانترو كبير 😅 خله أقل من ٣٠ ميقا (يكفي ٣-٨ ثواني)" }, 400);
+    await env.BUCKET.put("config/intro", request.body, { httpMetadata: { contentType: type } });
+    const s = await getSettings(env);
+    const next = { ...s, custom_intro: true, intro_on: true, intro_v: (s.intro_v || 0) + 1 };
+    await env.BUCKET.put(SETTINGS_KEY, JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
+    cache = { at: 0, value: null };
+    return json({ ok: true, settings: next });
+  }
+  if (action === "intro-reset" && request.method === "POST") {
+    await env.BUCKET.delete("config/intro");
+    const s = await getSettings(env);
+    const next = { ...s, custom_intro: false, intro_on: false, intro_v: (s.intro_v || 0) + 1 };
+    await env.BUCKET.put(SETTINGS_KEY, JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
+    cache = { at: 0, value: null };
+    return json({ ok: true, settings: next });
+  }
   if (action === "tap-reset" && request.method === "POST") {
     await env.BUCKET.delete("config/tap-sound");
     const s = await getSettings(env);
@@ -270,6 +299,30 @@ export async function serveManifest(env) {
       { src: `/brand/icon-512.png?v=${v}`, sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   }), { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "no-cache" } });
+}
+
+const INTRO_MAX = 30 * 1024 * 1024;
+
+/** الانترو: يدعم Range عشان الآيفون يشغّله فوراً بدون ما يحمّله كامل */
+export async function serveIntro(request, env) {
+  const range = request.headers.get("range");
+  const m = range && range.match(/bytes=(\d*)-(\d*)/);
+  const opts = {};
+  if (m && (m[1] || m[2])) {
+    const start = m[1] ? +m[1] : undefined, end = m[2] ? +m[2] : undefined;
+    opts.range = start === undefined ? { suffix: end } : end === undefined ? { offset: start } : { offset: start, length: end - start + 1 };
+  }
+  const obj = await env.BUCKET.get("config/intro", opts);
+  if (!obj) return new Response("", { status: 404 });
+  const h = new Headers({ "content-type": obj.httpMetadata?.contentType || "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=604800", "x-content-type-options": "nosniff" });
+  if (m && obj.range) {
+    const off = obj.range.offset ?? (obj.size - obj.range.suffix);
+    const len = obj.range.length ?? (obj.size - off);
+    h.set("content-range", `bytes ${off}-${off + len - 1}/${obj.size}`); h.set("content-length", String(len));
+    return new Response(request.method === "HEAD" ? null : obj.body, { status: 206, headers: h });
+  }
+  h.set("content-length", String(obj.size));
+  return new Response(request.method === "HEAD" ? null : obj.body, { headers: h });
 }
 
 /** صوت النقر اللي رفعه الأدمن */

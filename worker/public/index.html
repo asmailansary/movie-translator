@@ -238,6 +238,18 @@ input[type=url]{direction:ltr;text-align:left}
   border-radius:999px;padding:8px 16px;font-size:14px;white-space:nowrap;max-width:92%;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.on{opacity:1}
 
+/* ───────── الانترو: يطلع داخل إطار الفلم ويذوب فيه ───────── */
+.opener{position:absolute;inset:0;z-index:7;background:#000;display:none;opacity:1;overflow:hidden;
+  transition:opacity .8s cubic-bezier(.4,0,.2,1),transform 1s cubic-bezier(.22,1,.36,1)}
+.opener.on{display:block}
+.opener video{width:100%;height:100%;object-fit:contain;display:block;opacity:0;transform:scale(1.04);transition:opacity .45s ease,transform 1.6s cubic-bezier(.22,1,.36,1)}
+.opener.live video{opacity:1;transform:none}
+.opener.out{opacity:0;transform:scale(1.08);pointer-events:none}
+.oskip{position:absolute;bottom:max(14px,6%);left:14px;z-index:2;border:1px solid #ffffff40;background:#0007;color:#fff;font:inherit;font-size:13px;
+  border-radius:999px;padding:7px 14px;opacity:0;pointer-events:none;transition:opacity .4s;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.opener.canskip .oskip{opacity:1;pointer-events:auto}
+.stage.introing .ctl,.stage.introing .subs{opacity:0!important;pointer-events:none!important}
+
 /* ───────── وضع السينما ───────── */
 body.cinema{padding:0;overflow:hidden;background:#000;overscroll-behavior:none}
 body.cinema .wrap>*:not(#watch){display:none!important}
@@ -434,6 +446,7 @@ body.cinema .not-cinema{display:none!important}
       <div class="ripple l" id="ripL"><span>⏪ 10</span></div>
       <div class="ripple r" id="ripR"><span>10 ⏩</span></div>
       <div class="subs" id="subs" aria-live="polite"></div>
+      <div class="opener" id="opener"><video playsinline webkit-playsinline preload="auto"></video><button type="button" class="oskip" id="oskip">تخطّي ‹</button></div>
 
       <div class="ctl" id="ctl">
         <div class="top">
@@ -785,6 +798,7 @@ body.cinema .not-cinema{display:none!important}
     $("#srtBtn").classList.add("hidden"); $("#ttl").textContent = "";
     setHeart(favs.some(f => f.key === favKey()));
     stage.classList.remove("started", "ended"); stage.classList.add("paused");
+    openerDone = false; prepOpener();
     loadVideo(vid, resumeAt); poll(); updateHint();
     document.title = kind === "clip" ? "فهّمني · مقطع 📱" : "فهّمني · فلم 🎬";
     showWatch(true);
@@ -951,6 +965,7 @@ body.cinema .not-cinema{display:none!important}
       getPlayerState: () => (v.ended ? 0 : v.paused ? 2 : 1),
       playVideo: () => { if (!v.src) return toast(word("الفلم يتجهز للعرض… ⏳")); v.play().catch(() => {}); },
       pauseVideo: () => v.pause(), stopVideo: () => v.pause(),
+      mute: () => { v.muted = true; }, unMute: () => { v.muted = false; },
       seekTo: t => { v.currentTime = t; }, setPlaybackRate: r => { v.playbackRate = r; },
       getVideoLoadedFraction: () => { try { return v.buffered.length ? v.buffered.end(v.buffered.length - 1) / v.duration : 0; } catch { return 0; } },
       setSrc: src => { if (!v.getAttribute("src")) { v.src = src; v.load(); } },
@@ -997,13 +1012,66 @@ body.cinema .not-cinema{display:none!important}
   const playing = () => { try { return player?.getPlayerState?.() === 1; } catch { return false; } };
   function onState(e) {
     const st = e.data;
+    if (st === 1 && openerOn) { try { player.pauseVideo(); if (holdAt != null) player.seekTo(holdAt, true); } catch {} return; }
+    if (openerOn && st === 2) return;
     if (st === 1) { stage.classList.add("started"); stage.classList.remove("paused", "ended"); showUI(); }
     if (st === 2) { stage.classList.add("paused"); showUI(true); }
     if (st === 0) { stage.classList.add("paused", "ended"); showUI(true); savePosition(); }
     $("#icPlay").classList.toggle("hidden", st === 1);
     $("#icPause").classList.toggle("hidden", st !== 1);
   }
-  function togglePlay() { if (!player) return; playing() ? player.pauseVideo() : player.playVideo(); }
+  function togglePlay() {
+    if (!player) return;
+    if (playing()) return player.pauseVideo();
+    if (wantOpener()) return playOpener();
+    player.playVideo();
+  }
+
+  // ───── الانترو حق صاحب التطبيق: يطلع قبل الفلم ويذوب فيه
+  let openerDone = false, openerOn = false, holdAt = null, openerSafety = 0;
+  const opener = $("#opener"), ov = opener.querySelector("video");
+  const dayStamp = () => new Date().toLocaleDateString("en-CA");
+  function wantOpener() {
+    if (openerDone || openerOn || !S.intro_on || !S.custom_intro) return false;
+    if (S.intro_where === "films" && job && job.platform !== "youtube") return false;
+    if (S.intro_every === "daily" && store.get("openerDay", "") === dayStamp()) return false;
+    return true;
+  }
+  function prepOpener() {   // نجهّزه أول ما تنفتح الصفحة عشان يبدأ فوراً
+    if (!S.intro_on || !S.custom_intro) return;
+    const src = "/brand/intro?v=" + (S.intro_v || 0);
+    if (ov.getAttribute("src") !== src) { ov.src = src; ov.load(); }
+  }
+  function playOpener() {
+    openerOn = true; openerDone = true;
+    if (S.intro_every === "daily") store.set("openerDay", dayStamp());
+    prepOpener();
+    opener.classList.remove("out", "live", "canskip"); opener.classList.add("on"); stage.classList.add("introing");
+    ov.currentTime = 0; ov.muted = false;
+    ov.play().then(() => {
+      opener.classList.add("live");
+      if (S.intro_skip !== false) setTimeout(() => openerOn && opener.classList.add("canskip"), 2000);
+    }).catch(() => endOpener());
+    // نشغّل الفلم بنفس اللمسة (عشان الآيفون يسمح له يكمل بعدين) ونوقفه تحت الانترو بدون صوت
+    holdAt = now();
+    try { player.mute?.(); player.playVideo(); } catch {}
+    clearTimeout(openerSafety); openerSafety = setTimeout(endOpener, 30000);
+  }
+  function endOpener() {
+    if (!openerOn) return;
+    openerOn = false; clearTimeout(openerSafety);
+    const at = holdAt; holdAt = null;
+    try { if (at != null) player.seekTo(at, true); player.unMute?.(); player.playVideo(); } catch {}
+    opener.classList.add("out");
+    setTimeout(() => { opener.classList.remove("on", "out", "live", "canskip"); stage.classList.remove("introing"); ov.pause(); }, 850);
+    // لو الآيفون ما خلّى الفلم يكمل لحاله، يطلع زر التشغيل ولمسة وحدة تكمّل
+    setTimeout(() => { if (!playing()) { stage.classList.add("paused"); showUI(true); } }, 1600);
+  }
+  ov.addEventListener("ended", endOpener);
+  ov.addEventListener("error", () => openerOn && endOpener());
+  $("#oskip").onclick = e => { e.stopPropagation(); endOpener(); };
+  opener.addEventListener("click", e => e.stopPropagation());
+  opener.addEventListener("dblclick", e => e.stopPropagation());
   function seekBy(d) { if (!player) return; const t = Math.max(0, Math.min(total() - 1, now() + d)); player.seekTo(t, true); lastIdx = -2; }
 
   // الأزرار تختفي بعد ٣ ثواني
