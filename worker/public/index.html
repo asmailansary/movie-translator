@@ -1014,7 +1014,8 @@ body.cinema .not-cinema{display:none!important}
     const st = e.data;
     if (st === 1 && openerOn) { try { player.pauseVideo(); if (holdAt != null) player.seekTo(holdAt, true); } catch {} return; }
     if (openerOn && st === 2) return;
-    if (st === 1) { stage.classList.add("started"); stage.classList.remove("paused", "ended"); showUI(); }
+    // أول ما يشتغل الفلم الأزرار تختفي، والمستخدم يلمس الشاشة لو بغاها (يتناسق مع الانترو)
+    if (st === 1) { stage.classList.add("started"); stage.classList.remove("paused", "ended"); hideUI(); }
     if (st === 2) { stage.classList.add("paused"); showUI(true); }
     if (st === 0) { stage.classList.add("paused", "ended"); showUI(true); savePosition(); }
     $("#icPlay").classList.toggle("hidden", st === 1);
@@ -1046,7 +1047,7 @@ body.cinema .not-cinema{display:none!important}
     openerOn = true; openerDone = true;
     if (S.intro_every === "daily") store.set("openerDay", dayStamp());
     prepOpener();
-    opener.classList.remove("out", "live", "canskip"); opener.classList.add("on"); stage.classList.add("introing");
+    opener.classList.remove("out", "live", "canskip"); opener.classList.add("on"); stage.classList.add("introing"); hideUI(); setTimeout(hideUI, 0);
     ov.currentTime = 0; ov.muted = false;
     ov.play().then(() => {
       opener.classList.add("live");
