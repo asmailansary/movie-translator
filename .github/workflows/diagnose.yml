@@ -23,6 +23,9 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
       - run: pip install -q -U "yt-dlp[default]" "urllib3[socks]"
       - name: WARP
         continue-on-error: true
@@ -47,8 +50,8 @@ jobs:
           U="https://www.youtube.com/watch?v=$VID"
           for mode in direct warp; do
             P=""; [ "$mode" = warp ] && P="--proxy socks5://127.0.0.1:40000"
-            OUT=$(yt-dlp $P -f bestaudio -o "/tmp/$mode-full.%(ext)s" "$U" 2>&1 | grep -E "ERROR|WARNING|100%" | tail -2 | tr '\n' ' ' | cut -c1-300)
+            OUT=$(yt-dlp $P -f bestaudio --newline -o "/tmp/$mode-full.%(ext)s" "$U" 2>&1 | grep -vE "^\[download\] +[0-9.]+% " | tail -3 | tr '\n' ' ' | cut -c1-300)
             echo "::notice::[$mode full] $OUT | files: $(ls -la /tmp/$mode-full.* 2>/dev/null | awk '{print $5}' | tr '\n' ' ')"
-            OUT=$(yt-dlp $P -f bestaudio --download-sections "*0-600" -o "/tmp/$mode-sec.%(ext)s" "$U" 2>&1 | grep -E "ERROR|WARNING" | tail -2 | tr '\n' ' ' | cut -c1-300)
+            OUT=$(yt-dlp $P -f bestaudio --download-sections "*0-600" --newline -o "/tmp/$mode-sec.%(ext)s" "$U" 2>&1 | grep -vE "^\[download\] +[0-9.]+% |frame=|size=" | tail -3 | tr '\n' ' ' | cut -c1-300)
             echo "::notice::[$mode section] $OUT | files: $(ls -la /tmp/$mode-sec.* 2>/dev/null | awk '{print $5}' | tr '\n' ' ')"
           done
