@@ -85,8 +85,8 @@ export function extractVideoId(raw) {
 }
 
 // معرّف موحّد: يوتيوب (11 حرف)، تيك توك tt_رقم، انستا ig_كود
-const VID_RE = /^(?:[A-Za-z0-9_-]{11}|tt_\d{6,25}|ig_[A-Za-z0-9_-]{5,40})$/;
-const VID_PART = "(?:[A-Za-z0-9_-]{11}|tt_\\d{6,25}|ig_[A-Za-z0-9_-]{5,40})";
+const VID_RE = /^(?:[A-Za-z0-9_-]{11}|tt_\d{6,25}|ig_[A-Za-z0-9_-]{5,40}|up_[A-Za-z0-9]{20})$/;
+const VID_PART = "(?:[A-Za-z0-9_-]{11}|tt_\\d{6,25}|ig_[A-Za-z0-9_-]{5,40}|up_[A-Za-z0-9]{20})";
 
 async function parseMedia(raw) {
   const url = String(raw || "").trim();
@@ -168,7 +168,7 @@ async function dispatch(env, job, origin) {
           dialect: job.dialect,
           callback: origin,
           reuse: job.reuse ? "1" : "0",
-          media_url: job.platform === "youtube" ? "" : job.media_url,
+          media_url: job.platform === "youtube" ? "" : job.platform === "upload" ? `${origin}/media/${job.video_id}.mp4` : job.media_url,
           kind: job.kind || "movie",
         },
       }),
@@ -195,13 +195,14 @@ const userKey = (dev, name) => `users/${dev}/${name}`;
 const noDevice = () => json({ error: "حدّث الصفحة وجرّب مرة ثانية 🔄" }, 400);
 
 // حد يومي عشان ما تنتهي الحدود المجانية لو انتشر الرابط
-async function checkLimit(env, dev) {
+async function checkLimit(env, dev, peek = false) {
   const st = await getSettings(env);
   const perDevice = st.daily_per_device, all = st.daily_total;
   const key = `limits/${new Date().toISOString().slice(0, 10)}.json`;
   const l = (await getJSON(env, key)) || { total: 0, devices: {} };
   if ((l.devices[dev] || 0) >= perDevice) return `وصلت حدك اليوم (${perDevice} ترجمات جديدة) 😅 ارجع بكرة، واللي مترجم من قبل يفتح عادي`;
   if (l.total >= all) return "الأداة وصلت حدها اليوم 😅 ارجع بكرة، واللي مترجم من قبل يفتح عادي";
+  if (peek) return null;   // نتأكد بس (قبل الرفع)، والعد يصير لما تبدأ الترجمة
   l.total++;
   l.devices[dev] = (l.devices[dev] || 0) + 1;
   await putJSON(env, key, l);
@@ -222,14 +223,21 @@ async function createJob(request, env) {
     return json({ error: "طلب غير صالح." }, 400);
   }
   const kind = ["clip", "song"].includes(body.kind) ? body.kind : "movie";
-  const media = await parseMedia(body.url);
+  let media;
+  if (body.upload) {   // ملف مرفوع من جوال المستخدم
+    const up = /^up_[A-Za-z0-9]{20}$/.test(body.upload) ? await getJSON(env, uploadKey(body.upload)) : null;
+    if (!up || !up.done || up.dev !== dev) return json({ error: "الملف ما ارتفع كامل 🤔 ارفعه مرة ثانية" }, 400);
+    if (st.show_upload === false) return json({ error: "الرفع من الجوال موقف حالياً 🙏" }, 400);
+    media = { vid: body.upload, platform: "upload", url: `upload:${body.upload}` };
+  } else media = await parseMedia(body.url);
   const source = body.source || "auto";
   const dialect = body.dialect || "najdi";
   if (!media) return json({ error: kind === "clip" ? "الرابط مو رابط مقطع من يوتيوب أو تيك توك أو انستا 🤔" : "الرابط مو رابط فيديو يوتيوب صحيح 🤔" }, 400);
-  if (kind !== "clip" && media.platform !== "youtube") return json({ error: "هذا رابط مقطع سوشل 📱 حطه في خانة «رابط المقطع من السوشل»" }, 400);
+  if (kind !== "clip" && !["youtube", "upload"].includes(media.platform)) return json({ error: "هذا رابط مقطع سوشل 📱 حطه في خانة «رابط المقطع من السوشل»" }, 400);
   if (kind === "song" && st.show_songs === false) return json({ error: "خانة الأغاني موقفة حالياً 🙏" }, 400);
   const vid = media.vid, shortsHint = media.shorts || media.platform !== "youtube";
   const meta = { platform: media.platform, kind, media_url: media.url };
+  if (media.platform === "upload") Object.assign(meta, { media_ready: true, upload_title: String(body.title || "").slice(0, 120) });
   if (!(source in LANGS) || !(dialect in DIALECTS)) return json({ error: "اختيار اللغة أو اللهجة غير صحيح." }, 400);
   if (!st.dialects_enabled.includes(dialect)) return json({ error: "هاللهجة موقفة حالياً 🙏 اختر لهجة ثانية" }, 400);
   if (kind === "clip" && !st.show_social) return json({ error: "خانة المقاطع موقفة حالياً 🙏" }, 400);
@@ -270,7 +278,7 @@ async function createJob(request, env) {
   const job = {
     id, video_id: vid, source, dialect, status: "queued", reuse, owners: [dev], aspect: shortsHint ? 0.5625 : 0, ...meta,
     stage: reuse ? `نترجم ${dialect === "fusha" ? "بالفصحى" : "باللهجة ال" + DIALECTS[dialect].name} ⚡` : "نجهّز لك الفلم… 🍿", progress: 0.01,
-    title: "", duration: 0, ready_until: 0, error: null, segments: [],
+    title: meta.upload_title || "", duration: 0, ready_until: 0, error: null, segments: [],
     created: Date.now(), updated: Date.now(),
   };
   // تبديل لهجة + مفتاح Gemini موجود في Cloudflare: نترجم هنا مباشرة بدون انتظار GitHub
@@ -358,7 +366,7 @@ async function ingest(request, env, id, ctx) {
   if (!job) return json({ error: "not found" }, 404);
   const p = await request.json();
   for (const k of ["status", "stage", "progress", "title", "duration", "ready_until", "error", "aspect", "media_ready"])
-    if (p[k] !== undefined) job[k] = p[k];
+    if (p[k] !== undefined && !(k === "title" && !p[k] && job.title)) job[k] = p[k];
   if (Array.isArray(p.append)) {
     for (const s of p.append)
       if (typeof s.start === "number" && typeof s.end === "number")
@@ -447,7 +455,7 @@ async function serveMedia(request, env, vid) {
   }
   const obj = await env.BUCKET.get(mediaKey(vid), opts);
   if (!obj) return new Response("المقطع انتهت صلاحيته، افتحه من جديد 🔄", { status: 404 });
-  const h = new Headers({ "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff" });
+  const h = new Headers({ "content-type": obj.httpMetadata?.contentType || "video/mp4", "accept-ranges": "bytes", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff" });
   if (m && obj.range) {
     const off = obj.range.offset ?? (obj.size - obj.range.suffix);
     const len = obj.range.length ?? (obj.size - off);
@@ -544,6 +552,50 @@ async function handoff(request, env, action) {
     return json({ device: h.dev, recent: h.recent || [] });
   }
   return json({ error: "غير موجود" }, 404);
+}
+
+// ───────── رفع فلم أو حلقة أو أغنية من الجوال ─────────
+// يترفع قطع (كل قطعة ٥٠ ميقا) عشان الملفات الكبيرة ما تفشل، ويتخزّن باسم عشوائي ما أحد يقدر يخمّنه
+const UPLOAD_MAX = 2 * 1024 * 1024 * 1024;     // ٢ قيقا
+const PART_SIZE = 50 * 1024 * 1024;
+const uploadKey = (vid) => `uploads/${vid}.json`;
+const UPLOAD_TYPES = /^(video\/(mp4|quicktime|x-m4v|webm)|audio\/(mp4|mpeg|mp3|x-m4a|aac|wav|x-wav))$/;
+async function uploadStart(request, env) {
+  const dev = deviceOf(request); if (!dev) return noDevice();
+  const st = await getSettings(env);
+  if (st.show_upload === false) return json({ error: "الرفع من الجوال موقف حالياً 🙏" }, 400);
+  let b = {}; try { b = JSON.parse((await request.text()).slice(0, 2000) || "{}"); } catch {}
+  const size = Math.floor(+b.size || 0), type = String(b.type || "").toLowerCase();
+  if (!UPLOAD_TYPES.test(type)) return json({ error: "هالملف ما ينفع 🤔 اختر فيديو (mp4 أو mov) أو صوت (m4a أو mp3)" }, 400);
+  if (!size || size > UPLOAD_MAX) return json({ error: "الملف كبير 😅 أقصى شي ٢ قيقا" }, 400);
+  const limited = await checkLimit(env, dev, true);
+  if (limited) return json({ error: limited }, 429);
+  const rnd = crypto.getRandomValues(new Uint8Array(20));
+  const vid = "up_" + [...rnd].map((x) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[x % 62]).join("");
+  const mp = await env.BUCKET.createMultipartUpload(mediaKey(vid), { httpMetadata: { contentType: type } });
+  await putJSON(env, uploadKey(vid), { dev, uploadId: mp.uploadId, size, type, parts: [], done: false, created: Date.now() });
+  return json({ vid, part_size: PART_SIZE, parts: Math.ceil(size / PART_SIZE) });
+}
+async function uploadPart(request, env, vid, n) {
+  const dev = deviceOf(request); const up = await getJSON(env, uploadKey(vid));
+  if (!up || up.dev !== dev || up.done) return json({ error: "الرفع انتهى أو مو لك 🤔" }, 404);
+  if (n < 1 || n > Math.ceil(up.size / PART_SIZE)) return json({ error: "قطعة غلط" }, 400);
+  const mp = env.BUCKET.resumeMultipartUpload(mediaKey(vid), up.uploadId);
+  const part = await mp.uploadPart(n, request.body);
+  return json({ part: n, etag: part.etag });
+}
+async function uploadComplete(request, env, vid) {
+  const dev = deviceOf(request); const up = await getJSON(env, uploadKey(vid));
+  if (!up || up.dev !== dev) return json({ error: "الرفع انتهى أو مو لك 🤔" }, 404);
+  let b = {}; try { b = JSON.parse((await request.text()).slice(0, 20000) || "{}"); } catch {}
+  const parts = (Array.isArray(b.parts) ? b.parts : []).map((p) => ({ partNumber: +p.part, etag: String(p.etag || "") }))
+    .filter((p) => p.partNumber >= 1 && p.etag).sort((a, z) => a.partNumber - z.partNumber);
+  if (parts.length !== Math.ceil(up.size / PART_SIZE)) return json({ error: "الملف ما ارتفع كامل، جرّب مرة ثانية" }, 400);
+  const mp = env.BUCKET.resumeMultipartUpload(mediaKey(vid), up.uploadId);
+  await mp.complete(parts);
+  up.done = true; up.parts = parts.length;
+  await putJSON(env, uploadKey(vid), up);
+  return json({ ok: true, vid });
 }
 
 // ───────── أغلفة الأفلام ومعلوماتها (من يوتيوب) ─────────
@@ -651,7 +703,7 @@ async function favorites(request, env, key) {
     favs[k] = {
       key: k, video_id: vid, source: b.source, dialect: b.dialect,
       kind: ["clip", "song"].includes(b.kind) ? b.kind : (old.kind || "movie"),
-      url: /^https:\/\/(www\.)?(youtube\.com|youtu\.be|tiktok\.com|instagram\.com)\//.test(String(b.url || "")) ? String(b.url).slice(0, 300) : (old.url || ""),
+      url: /^(https:\/\/(www\.)?(youtube\.com|youtu\.be|tiktok\.com|instagram\.com)\/|upload:up_[A-Za-z0-9]{20}$)/.test(String(b.url || "")) ? String(b.url).slice(0, 300) : (old.url || ""),
       title: String(b.title ?? old.title ?? "").slice(0, 200),
       position: num(b.position, old.position || 0),
       duration: num(b.duration, old.duration || 0),
@@ -729,6 +781,11 @@ export default {
       if (path === "/api/hello" && request.method === "POST") return hello(request, env);
       m = path.match(/^\/api\/handoff\/(create|claim)$/);
       if (m && request.method === "POST") return handoff(request, env, m[1]);
+      if (path === "/api/upload/start" && request.method === "POST") return uploadStart(request, env);
+      m = path.match(/^\/api\/upload\/(up_[A-Za-z0-9]{20})\/(\d{1,3})$/);
+      if (m && request.method === "PUT") return uploadPart(request, env, m[1], +m[2]);
+      m = path.match(/^\/api\/upload\/(up_[A-Za-z0-9]{20})\/complete$/);
+      if (m && request.method === "POST") return uploadComplete(request, env, m[1]);
       m = path.match(/^\/thumb\/([A-Za-z0-9_-]{11})\.jpg$/);
       if (m && request.method === "GET") return thumb(request, env, ctx, m[1]);
       m = path.match(/^\/api\/meta\/([A-Za-z0-9_-]{11})$/);

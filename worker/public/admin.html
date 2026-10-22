@@ -290,6 +290,7 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
       <h2>الأقسام 🧩</h2>
       <div class="row"><div class="lbl">خانة مقاطع السوشل 📱</div><label class="sw"><input type="checkbox" id="s_show_social"><i></i></label></div>
       <div class="row"><div class="lbl">خانة الأغاني 🎵</div><label class="sw"><input type="checkbox" id="s_show_songs"><i></i></label></div>
+      <div class="row"><div class="lbl">الرفع من الجوال 📂<small>الملفات المرفوعة تنمسح بعد ١٤ يوم عشان المساحة</small></div><label class="sw"><input type="checkbox" id="s_show_upload"><i></i></label></div>
       <div class="row"><div class="lbl">زر الدبلجة 🎙️</div><label class="sw"><input type="checkbox" id="s_show_dub"><i></i></label></div>
       <div class="row"><div class="lbl">بطاقة سناب 👻</div><label class="sw"><input type="checkbox" id="s_show_snap"><i></i></label></div>
       <label class="f">رابط سناب</label>
@@ -332,7 +333,7 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
   const BGS = [["#0d0b09", "بني"], ["#121214", "فحمي"], ["#0f1730", "كحلي"], ["#0b1229", "ليلي"], ["#16112a", "بنفسجي"], ["#1a1020", "توتي"], ["#0b1a17", "زمردي"], ["#0f1419", "رمادي"]];
   const COLORS = ["#e0a84a", "#e8735a", "#d9577b", "#9b7be0", "#4f8ff0", "#2fb4a6", "#5cb85c", "#c9a227"];
   const TEXTS = {
-    movie_label: "عنوان خانة رابط الفلم", clip_label: "عنوان خانة رابط المقطع", song_label: "عنوان خانة رابط الأغنية", go_btn: "زر الترجمة",
+    movie_label: "عنوان خانة رابط الفلم", clip_label: "عنوان خانة رابط المقطع", song_label: "عنوان خانة رابط الأغنية", upload_label: "زر الرفع من الجوال", go_btn: "زر الترجمة",
     clip_intro: "أول رسالة لما يترجم مقطع", switch_btn: "زر تبديل الترجمة", dub_msg: "رسالة زر الدبلجة",
     download_confirm: "تنبيه قبل تحميل الترجمة", ready_toast: "رسالة «جاهز» داخل الأداة", fav_empty: "لما ما فيه محفوظة",
     snap_title: "عنوان بطاقة سناب", snap_sub: "نص بطاقة سناب",
@@ -436,7 +437,7 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     for (const k of ["name", "tagline", "splash", "announcement", "snap_url", "maintenance_msg", "daily_per_device", "daily_total", "font_size"]) {
       const el = $("#s_" + k); el.value = val(k) ?? ""; el.oninput = () => set(k, el.type === "number" ? +el.value : el.value);
     }
-    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_skip", "show_songs"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
+    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_skip", "show_songs", "show_upload"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
     const sp = $("#s_splash_ms"), spv = () => { $("#splashV").textContent = (val("splash_ms") / 1000).toFixed(1) + " ثانية"; };
     sp.value = val("splash_ms"); spv(); sp.oninput = () => { set("splash_ms", +sp.value); spv(); };
     const tv = $("#s_tap_volume"), tvv = () => { $("#tapVolV").textContent = val("tap_volume") + "٪"; };

@@ -312,6 +312,18 @@ body.cinema .not-cinema{display:none!important}
 .mv{display:flex;gap:8px;margin-top:8px}
 .mv input{font-size:13px;padding:9px 10px}
 .mv .btn2{flex:none;font-size:13px;padding:8px 12px}
+/* رفع من الجوال */
+.upbox{margin-top:14px}
+.upbtn{width:100%;display:flex;align-items:center;gap:12px;font:inherit;text-align:right;color:var(--text);background:var(--surface2);
+  border:1.5px dashed color-mix(in srgb,var(--accent) 60%,var(--line));border-radius:14px;padding:12px 14px}
+.upbtn .ic{font-size:26px}
+.upbtn b{display:block;font-size:15px}
+.upbtn small{color:var(--muted);font-size:12px}
+.upchosen{margin-top:10px;display:grid;gap:10px}
+.uprow{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.upname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;direction:ltr;text-align:left}
+.upx{border:0;background:none;color:var(--muted);font-size:22px;line-height:1;padding:0 4px}
+.uppct{color:var(--muted);font-size:12px;text-align:center}
 /* ───────── الرئيسية بستايل منصات الأفلام (بهوية فهّمني) ───────── */
 body:not(.watching){padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 body:not(.watching)[data-hp=home] [data-pane]:not([data-pane=home]),
@@ -491,6 +503,16 @@ body.watching .tabbar{display:none}
     <input class="social-only" id="clipUrl" type="url" inputmode="url" placeholder="تيك توك، انستا، أو شورتس يوتيوب">
     <label class="t song-only" for="songUrl" style="margin-top:12px" data-t="song_label">رابط الأغنية من يوتيوب 🎵</label>
     <input class="song-only" id="songUrl" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…">
+    <div class="upbox upload-only" id="upBox">
+      <button type="button" class="upbtn" id="pickFile"><span class="ic">📂</span><span><b data-t="upload_label">أو ارفع من جوالك</b><small>فلم، حلقة مسلسل، أو أغنية (لين ٢ قيقا)</small></span></button>
+      <input type="file" id="upFile" accept="video/*,audio/*,.mov,.mp4,.m4a,.mp3" class="hidden">
+      <div class="upchosen hidden" id="upChosen">
+        <div class="uprow"><span class="upname" id="upName"></span><button type="button" class="upx" id="upClear" aria-label="شيل الملف">×</button></div>
+        <div class="seg" id="upKind"><button type="button" data-k="movie" aria-pressed="true">فلم أو حلقة 🎬</button><button type="button" data-k="song" aria-pressed="false">أغنية 🎵</button></div>
+        <div class="prog hidden" id="upProg"><i id="upFill"></i></div>
+        <small class="uppct" id="upPct"></small>
+      </div>
+    </div>
     <div class="row">
       <div>
         <label class="t">لغة الفلم</label>
@@ -680,6 +702,7 @@ body.watching .tabbar{display:none}
     $("#snapBox").classList.toggle("hidden", s.show_snap === false);
     document.querySelectorAll(".social-only").forEach(el => el.classList.toggle("hidden", s.show_social === false));
     document.querySelectorAll(".song-only").forEach(el => el.classList.toggle("hidden", s.show_songs === false));
+    document.querySelectorAll(".upload-only").forEach(el => el.classList.toggle("hidden", s.show_upload === false));
     document.querySelectorAll('#hchips [data-f=song]').forEach(el => el.classList.toggle("hidden", s.show_songs === false));
     $("#maintBox").textContent = s.maintenance ? "🛠️ " + s.maintenance_msg : ""; $("#maintBox").classList.toggle("hidden", !s.maintenance);
     $("#annBox").textContent = s.announcement || ""; $("#annBox").classList.toggle("hidden", !s.announcement);
@@ -818,19 +841,78 @@ body.watching .tabbar{display:none}
     showErr("");
     const btn = $("#goBtn"); btn.disabled = true; btn.textContent = "لحظة… ⏳";
     try {
-      const r = await api("/api/jobs", { method: "POST", body: JSON.stringify({ url, source: src, dialect: dia, kind }) });
+      const up = String(url || "").startsWith("upload:") ? String(url).slice(7) : "";
+      const r = await api("/api/jobs", { method: "POST", body: JSON.stringify(up ? { upload: up, title: upTitle, source: src, dialect: dia, kind } : { url, source: src, dialect: dia, kind }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(friendly(r.status, d.error));
       lang = src; dialect = dia; renderChips();
       openJob(d.job_id, d.video_id, resumeAt || 0, /\/shorts\//.test(url) || kind === "clip", d.platform || "youtube", kind, url);
+      if (localFiles[d.video_id]) player?.setSrc?.(localFiles[d.video_id]);   // نشغّله من الجوال نفسه (أسرع وما يستهلك نت)
     } catch (err) { showErr(err.message); window.scrollTo({ top: 0, behavior: "smooth" }); }
     finally { btn.disabled = Boolean(S.maintenance); btn.textContent = T("go_btn", "ترجم وشغّل 🎬"); }
   }
+  // ───── رفع ملف من الجوال (قطع قطع عشان الملفات الكبيرة)
+  let upFile = null, upKind = "movie", upTitle = "", uploading = false;
+  const localFiles = {};
+  const fmtSize = n => n > 1073741824 ? (n / 1073741824).toFixed(1) + " قيقا" : Math.max(1, Math.round(n / 1048576)) + " ميقا";
+  const fileType = f => f.type || (/\.mov$/i.test(f.name) ? "video/quicktime" : /\.m4a$/i.test(f.name) ? "audio/mp4" : /\.mp3$/i.test(f.name) ? "audio/mpeg" : /\.mp4$/i.test(f.name) ? "video/mp4" : "");
+  $("#pickFile").onclick = () => $("#upFile").click();
+  $("#upFile").onchange = () => {
+    const f = $("#upFile").files[0]; if (!f) return;
+    upFile = f; upTitle = f.name.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").slice(0, 120);
+    upKind = /^audio\//.test(fileType(f)) ? "song" : "movie";
+    $("#upName").textContent = `${f.name} · ${fmtSize(f.size)}`; $("#upChosen").classList.remove("hidden");
+    document.querySelectorAll("#upKind button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === upKind)));
+    $("#url").value = ""; $("#clipUrl").value = ""; $("#songUrl").value = ""; showErr("");
+  };
+  document.querySelectorAll("#upKind button").forEach(b => b.onclick = () => {
+    upKind = b.dataset.k; document.querySelectorAll("#upKind button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  });
+  $("#upClear").onclick = () => { if (uploading) return; upFile = null; $("#upFile").value = ""; $("#upChosen").classList.add("hidden"); };
+  function putPart(vid, n, blob, onProg) {
+    return new Promise((res, rej) => {
+      const x = new XMLHttpRequest(); x.open("PUT", `/api/upload/${vid}/${n}`); x.setRequestHeader("x-device", device);
+      x.upload.onprogress = e => e.lengthComputable && onProg(e.loaded);
+      x.onload = () => { let d = {}; try { d = JSON.parse(x.responseText); } catch {} x.status === 200 && d.etag ? res(d) : rej(new Error(d.error || "انقطع الرفع")); };
+      x.onerror = () => rej(new Error("انقطع النت وقت الرفع 📶")); x.send(blob);
+    });
+  }
+  async function uploadAndStart() {
+    const f = upFile, type = fileType(f);
+    const btn = $("#goBtn"); btn.disabled = true; uploading = true;
+    const prog = $("#upProg"), fill = $("#upFill"), pct = $("#upPct"); prog.classList.remove("hidden");
+    try {
+      const r = await api("/api/upload/start", { method: "POST", body: JSON.stringify({ size: f.size, type }) });
+      const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || "ما قدرنا نبدأ الرفع");
+      const parts = [], P = d.part_size; let doneBytes = 0;
+      for (let n = 1; n <= d.parts; n++) {
+        const blob = f.slice((n - 1) * P, Math.min(f.size, n * P));
+        let tries = 0;
+        for (;;) {
+          try {
+            const res = await putPart(d.vid, n, blob, l => { const p = (doneBytes + l) / f.size * 100; fill.style.width = p.toFixed(1) + "%";
+              pct.textContent = `نرفع ${Math.floor(p)}٪ · ${fmtSize(doneBytes + l)} من ${fmtSize(f.size)}`; btn.textContent = `نرفع ${Math.floor(p)}٪ ⏳`; });
+            parts.push(res); break;
+          } catch (e) { if (++tries >= 3) throw e; await new Promise(z => setTimeout(z, 1500 * tries)); }
+        }
+        doneBytes += blob.size;
+      }
+      const c = await api(`/api/upload/${d.vid}/complete`, { method: "POST", body: JSON.stringify({ parts }) });
+      const cd = await c.json().catch(() => ({})); if (!c.ok) throw new Error(cd.error || "ما كمل الرفع");
+      pct.textContent = "ارتفع ✓ نبدأ الترجمة 🍿";
+      localFiles[d.vid] = URL.createObjectURL(f);
+      uploading = false;
+      await start("upload:" + d.vid, lang, dialect, 0, upKind);
+      upFile = null; $("#upFile").value = ""; $("#upChosen").classList.add("hidden"); prog.classList.add("hidden"); fill.style.width = "0"; pct.textContent = "";
+    } catch (err) { showErr(err.message); pct.textContent = ""; }
+    finally { uploading = false; btn.disabled = Boolean(S.maintenance); btn.textContent = T("go_btn", "ترجم وشغّل 🎬"); }
+  }
   $("#form").addEventListener("submit", e => {
     e.preventDefault();
+    if (upFile && !uploading) return uploadAndStart();
     const movie = $("#url").value.trim(), clip = $("#clipUrl").value.trim(), song = $("#songUrl").value.trim();
     if ([movie, clip, song].filter(Boolean).length > 1) return showErr("حط رابط واحد بس 😅 يا فلم يا مقطع يا أغنية");
-    if (!movie && !clip && !song) return showErr("الصق رابط الفلم أو المقطع أو الأغنية أول 🔗");
+    if (!movie && !clip && !song) return showErr("الصق رابط أو ارفع ملف من جوالك أول 🔗");
     start(movie || clip || song, lang, dialect, 0, clip ? "clip" : song ? "song" : "movie");
   });
 

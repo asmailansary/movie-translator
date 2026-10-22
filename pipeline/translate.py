@@ -630,6 +630,31 @@ def validate_inputs():
 
 
 # ───────────────────────── تشغيل المهمة كاملة ─────────────────────────
+def fetch_uploaded(url, workdir: Path):
+    """ينزّل الملف المرفوع من Cloudflare ويطلع صوته (أخف للتفريغ)."""
+    src = workdir / "upload.bin"
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=600) as r, open(src, "wb") as f:
+        while True:
+            b = r.read(1 << 20)
+            if not b:
+                break
+            f.write(b)
+    out = workdir / "audio.m4a"
+    run = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(src), "-vn", "-ac", "1", "-ar", "16000",
+                          "-c:a", "aac", "-b:a", "48k", str(out)], capture_output=True, text=True)
+    if run.returncode != 0 or not out.exists():
+        raise UserError("ما قدرنا نقرا صوت الملف 😕 جرّب ملف ثاني (mp4 أو mov أو m4a)")
+    src.unlink(missing_ok=True)
+    pr = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(out)],
+                        capture_output=True, text=True)
+    try:
+        duration = float(pr.stdout.strip())
+    except ValueError:
+        duration = 0
+    return out, "", duration
+
+
 def upload_media(path: Path):
     """يرفع المقطع (تيك توك/انستا) لـ Cloudflare عشان يشتغل بمشغّلنا."""
     data = path.read_bytes()
@@ -721,7 +746,9 @@ def run():
     report(status="running", stage="نسحب صوت الفلم 🎧", progress=0.03)
 
     # ١) نسحب الصوت بس (بدون فيديو) — سريع حتى لفلم ساعتين
-    if MEDIA_URL:   # مقطع تيك توك/انستا: نسحب المقطع نفسه (صغير) ونشغّله بمشغّلنا
+    if "/media/up_" in MEDIA_URL:   # ملف رفعه المستخدم من جواله: موجود عندنا، نسحب صوته بس
+        audio, title, duration = fetch_uploaded(MEDIA_URL, workdir)
+    elif MEDIA_URL:   # مقطع تيك توك/انستا: نسحب المقطع نفسه (صغير) ونشغّله بمشغّلنا
         audio, title, duration = download_audio(
             VIDEO_ID, workdir, stem="clip", url=MEDIA_URL, max_seconds=600,
             fmt="best[ext=mp4][height<=720]/bv*[height<=720][ext=mp4]+ba[ext=m4a]/best[height<=720]/best")

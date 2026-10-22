@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS = {
   dialects_enabled: ["fusha", "najdi", "hijazi", "yemeni", "egyptian", "iraqi", "moroccan", "libyan", "algerian"],
   dialect_names: {},        // أسماء يكتبها الأدمن (مثلاً: نجدية 🇸🇦)
   show_songs: true,         // خانة الأغاني
+  show_upload: true,        // الرفع من الجوال
   splash_video: false,      // فيديو خلف شاشة الافتتاح
   splash_video_v: 0,
   splash_video_opacity: 45, // شفافية الفيديو (٠-١٠٠)
@@ -48,6 +49,7 @@ export const DEFAULT_SETTINGS = {
     movie_label: "رابط الفلم من يوتيوب 🎬",
     clip_label: "رابط المقطع من السوشل 📱",
     song_label: "رابط الأغنية من يوتيوب 🎵",
+    upload_label: "أو ارفع من جوالك",
     go_btn: "ترجم وشغّل 🎬",
     clip_intro: "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨",
     dub_msg: "شغالين على الدبلجة واذا صارت متوفرة بنعلمك💬",
@@ -101,7 +103,7 @@ function clean(input, current) {
     const u = str(input.snap_url, 200);
     out.snap_url = /^https:\/\/([a-z0-9-]+\.)*snapchat\.com\//i.test(u) ? u : current.snap_url;
   }
-  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_on", "intro_skip", "show_songs"]) if (k in input) out[k] = bool(input[k]);
+  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_on", "intro_skip", "show_songs", "show_upload"]) if (k in input) out[k] = bool(input[k]);
   if (input.intro_every === "always" || input.intro_every === "daily") out.intro_every = input.intro_every;
   if (input.intro_where === "all" || input.intro_where === "films") out.intro_where = input.intro_where;
   if ("splash_video_opacity" in input) out.splash_video_opacity = int(input.splash_video_opacity, 5, 100, current.splash_video_opacity ?? 45);
