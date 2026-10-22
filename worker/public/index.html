@@ -267,7 +267,7 @@ body.cinema .not-cinema{display:none!important}
 
   <a class="card snap" id="snapBox" href="https://snapchat.com/t/T4QBeB0D" target="_blank" rel="noopener">
     <span class="ghost" aria-hidden="true">👻</span>
-    <span><b>تحتاج مساعدة أو عندك فكرة؟</b><br><small>كلمني على سناب، حياك 🤍</small></span>
+    <span><b>تحتاج مساعدة؟</b><br><small>كلمني على سناب، حياك 🤍</small></span>
     <span class="go2" aria-hidden="true">‹</span>
   </a>
 
@@ -381,6 +381,7 @@ body.cinema .not-cinema{display:none!important}
   let offset = 0, size = store.get("size2", 12), showOrig = store.get("orig", false), lastIdx = -1, readyUntil = 0;
   let favs = [], isFav = false, title = "", duration = 0, speed = 1, jobDone = false, aspect = 16 / 9;
   let readyDialects = [], introUntil = 0, lastStage = "";
+  let edgeMode = false, doneWins = new Set(), WIN = 120, wasWaiting = false;
   const CLIP_INTRO = "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨";
   // نفس الكلام بس للمقاطع: «المقطع» بدل «الفلم»
   const word = t => (job?.kind === "clip" ? String(t).replace(/فلمك/g, "مقطعك").replace(/الفلم/g, "المقطع").replace(/فلم /g, "مقطع ") : t);
@@ -391,6 +392,7 @@ body.cinema .not-cinema{display:none!important}
   if (standalone && pushSupported && Notification.permission === "default" && !store.get("hide_pushTip", false)) $("#pushTip").classList.remove("hidden");
   document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => { $("#" + b.dataset.close).classList.add("hidden"); store.set("hide_" + b.dataset.close, true); });
 
+  api("/api/hello", { method: "POST", body: JSON.stringify({ app: standalone, push: pushOn() }) }).catch(() => {});
   fetch("/api/config").then(r => r.json()).then(c => {
     cfg = c;
     renderChips(); loadFavs().then(openFromUrl);
@@ -457,7 +459,36 @@ body.cinema .not-cinema{display:none!important}
     start(movie || clip, lang, dialect, 0, clip ? "clip" : "movie");
   });
 
-  function resetSubs() { segs = []; lastIdx = -1; readyUntil = 0; jobDone = false; $("#subs").innerHTML = ""; }
+  function resetSubs() { segs = []; lastIdx = -1; readyUntil = 0; jobDone = false; edgeMode = false; doneWins = new Set(); wasWaiting = false; $("#subs").innerHTML = ""; }
+  function mergeSegs(arr) {
+    const seen = new Set(segs.map(x => x.start + "|" + x.end));
+    for (const x of arr || []) if (!seen.has(x.start + "|" + x.end)) segs.push(x);
+    segs.sort((a, b) => a.start - b.start); lastIdx = -2;
+  }
+  // التبديل السريع: نترجم القطعة اللي تتفرج فيها أول، وبعدها اللي بعدها
+  async function edgeLoop() {
+    const myJob = job;
+    let fails = 0;
+    while (job === myJob && edgeMode) {
+      try {
+        const r = await api(`/api/edge/${job.id}?at=${Math.floor(now())}`, { method: "POST", body: "{}" });
+        const d = await r.json();
+        if (job !== myJob) return;
+        if (!r.ok) throw new Error(d.error);
+        if (d.fallback) { edgeMode = false; return poll(); }
+        if (d.segments) { const had = segs.length; mergeSegs(d.segments); if (!had && segs.length) readySound(); }
+        if (d.windows_done) doneWins = new Set(d.windows_done);
+        if (d.stage) { lastStage = d.stage; $("#stage-text").textContent = word(d.stage); }
+        if (d.progress != null) { $("#pct").textContent = Math.round(d.progress * 100) + "%"; $("#bar").style.width = d.progress * 100 + "%"; }
+        updateHint();
+        if (d.done) { edgeMode = false; jobDone = true; readyUntil = 1e9; $("#srtBtn").classList.remove("hidden"); updateHint(); return poll(); }
+        fails = 0;
+      } catch {
+        if (++fails > 4) { edgeMode = false; return poll(); }
+        await new Promise(r => setTimeout(r, 1500 * fails));
+      }
+    }
+  }
   function openJob(id, vid, resumeAt, vertHint, platform = "youtube", kind = "movie", url = "") {
     job = { id, vid, platform, kind, url: url || (platform === "youtube" ? "https://youtu.be/" + vid : "") };
     resetSubs(); title = ""; duration = 0; readyDialects = [];
@@ -503,7 +534,15 @@ body.cinema .not-cinema{display:none!important}
       const d = await r.json();
       if (myJob !== job) return;
       if (!r.ok) throw new Error(friendly(r.status, d.error));
+      if (d.edge) {
+        mergeSegs(d.segments); doneWins = new Set(d.windows_done || []); WIN = d.window || 120;
+        if (!edgeMode) { edgeMode = true; edgeLoop(); }
+        $("#stage-text").textContent = lastStage = word(d.stage);
+        return;
+      }
+      const hadSegs = segs.length;
       if (d.since === segs.length) segs.push(...d.segments);
+      if (!hadSegs && segs.length && d.status !== "done") readySound();
       readyUntil = d.ready_until || 0;
       if (d.title) { title = d.title; $("#ttl").textContent = title; }
       if (d.duration) duration = d.duration;
@@ -563,6 +602,7 @@ body.cinema .not-cinema{display:none!important}
       await savePosition();
       const r = await requestJob(job, lang, d);
       job = { ...job, id: r.job_id }; resetSubs(); introUntil = 0;
+      if (r.edge) { edgeMode = true; edgeLoop(); }
       if (readyDialects.includes(d)) toast(`تم ✓ صارت الترجمة ${d === "fusha" ? "بالفصحى" : "بالـ" + dName(d)} ⚡`);
       setHeart(favs.some(f => f.key === favKey()));
       history.replaceState(null, "", "/?job=" + job.id);
@@ -711,7 +751,7 @@ body.cinema .not-cinema{display:none!important}
     if (job && player) {
       const t = now() - offset;
       const i = findSeg(t);
-      const waiting = i < 0 && t > readyUntil && readyUntil < 1e8 && playing();
+      const waiting = i < 0 && playing() && (edgeMode ? !doneWins.has(Math.floor(Math.max(0, t) / WIN)) : (t > readyUntil && readyUntil < 1e8));
       const key = waiting ? -3 : i;
       if (key !== lastIdx) { lastIdx = key; render(i >= 0 ? segs[i] : null, waiting); }
       if (ts - lastBar > 250 && !dragging) {
@@ -754,6 +794,24 @@ body.cinema .not-cinema{display:none!important}
   });
   $("#showOrig").checked = showOrig;
   $("#showOrig").onchange = e => { showOrig = e.target.checked; store.set("orig", showOrig); lastIdx = -2; };
+
+  // نغمة الأداة: تشتغل داخل الأداة لما يجهز الفلم وانت فاتحها
+  let actx = null;
+  const unlockAudio = () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch {} };
+  ["touchend", "click"].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
+  function chime() {
+    if (!actx || store.get("mute", false)) return;
+    const t = actx.currentTime;
+    [[783.99, 0], [987.77, 0.11], [1174.66, 0.22], [1567.98, 0.36]].forEach(([f, d], i) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = i === 3 ? "triangle" : "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + d);
+      g.gain.exponentialRampToValueAtTime(i === 3 ? 0.12 : 0.16, t + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + (i === 3 ? 0.9 : 0.45));
+      o.connect(g).connect(actx.destination); o.start(t + d); o.stop(t + d + 1);
+    });
+  }
+  function readySound() { chime(); toast(word("فلمك جاهز 🍿 يلا نبدأ!")); try { navigator.vibrate?.(60); } catch {} }
 
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2600); }
 

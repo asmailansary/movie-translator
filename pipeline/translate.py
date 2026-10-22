@@ -674,7 +674,6 @@ def run_reuse():
         )
     pool.shutdown()
     report(status="done", stage="الفلم كله جاهز ✓ استمتع 🎬", progress=1.0, ready_until=10**9)
-    background_dialects([x for k in keys for x in groups[k]], title, (data.get("have") or []) + [DIALECT])
 
 
 def run():
@@ -760,7 +759,7 @@ def run():
         )
     pool.shutdown()
     report(status="done", stage="الفلم كله جاهز ✓ استمتع 🎬", progress=1.0, ready_until=10**9)
-    background_dialects(all_segs, title, [DIALECT])
+
 
 
 def friendly_error(e):

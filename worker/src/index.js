@@ -11,6 +11,7 @@
  */
 
 import { getVapid, saveSub, removeSub, notifyAll, validSubscription } from "./push.js";
+import { WINDOW, systemPrompt, translateLines } from "./edge.js";
 
 const LANGS = { auto: "تلقائي", en: "الإنجليزية", de: "الألمانية", fr: "الفرنسية" };
 const DIALECTS = {
@@ -257,6 +258,13 @@ async function createJob(request, env) {
     title: "", duration: 0, ready_until: 0, error: null, segments: [],
     created: Date.now(), updated: Date.now(),
   };
+  // تبديل لهجة + مفتاح Gemini موجود في Cloudflare: نترجم هنا مباشرة بدون انتظار GitHub
+  if (reuse && env.GEMINI_API_KEY) {
+    Object.assign(job, { edge: true, status: "running", windows_done: [], progress: 0.02 });
+    await putJSON(env, jobKey(id), job);
+    await env.BUCKET.put(activeKey(vid, source, dialect), id);
+    return json({ job_id: id, video_id: vid, platform: media.platform, edge: true });
+  }
   await putJSON(env, jobKey(id), job);
   const err = await dispatch(env, job, new URL(request.url).origin);
   if (err) {
@@ -320,6 +328,7 @@ async function getJob(request, env, id, wantSrt) {
   const ready = await readyDialects(env, job.video_id, job.source);
   return json({
     platform: job.platform || "youtube", kind: job.kind || "movie", media_ready: Boolean(job.media_ready), ready_dialects: ready,
+    edge: Boolean(job.edge && job.status !== "done"), windows_done: job.windows_done || [], window: WINDOW,
     video_id: job.video_id, source: job.source, dialect: job.dialect, status: job.status, stage: job.status === "error" ? job.error : job.stage,
     progress: job.progress || 0, title: job.title || "", duration: job.duration || 0, aspect: job.aspect || 0,
     error: job.error || null, ready_until: job.ready_until || 0,
@@ -435,6 +444,93 @@ async function serveMedia(request, env, vid) {
 }
 
 
+// ───────── التبديل السريع (يترجم القطعة اللي تتفرج فيها) ─────────
+async function edgeStep(request, env, id, ctx) {
+  const job = await getJSON(env, jobKey(id));
+  if (!job) return json({ error: "غير موجود" }, 404);
+  if (!job.edge || job.status === "done") return json({ done: job.status === "done", fallback: !job.edge && job.status !== "done" });
+  const src = await getJSON(env, job.reuse);
+  if (!src) return json({ error: "غير موجود" }, 404);
+  const lines = src.segments || [];
+  const total = Math.max(1, Math.ceil(Math.max(...lines.map((l) => l.end), 1) / WINDOW));
+  const done = new Set(job.windows_done || []);
+  const at = Math.max(0, parseFloat(new URL(request.url).searchParams.get("at")) || 0);
+  // أول شي القطعة اللي تتفرج فيها، بعدها اللي بعدها، وآخر شي اللي قبلها
+  const here = Math.min(total - 1, Math.floor(at / WINDOW));
+  let w = -1;
+  for (let i = here; i < total && w < 0; i++) if (!done.has(i)) w = i;
+  for (let i = 0; i < here && w < 0; i++) if (!done.has(i)) w = i;
+  if (w < 0) w = here;
+  const part = lines.filter((l) => l.start >= w * WINDOW && l.start < (w + 1) * WINDOW).map(({ start, end, src }) => ({ start, end, src }));
+  const before = lines.filter((l) => l.start < w * WINDOW).slice(-3).map((l) => l.src);
+  let out = [];
+  if (part.length) {
+    try {
+      out = await translateLines(env, systemPrompt(job.dialect, DIALECTS[job.dialect].name, src.title), part, before);
+    } catch (e) {
+      // ما ضبط هنا (مثلاً خلص حد Gemini): نكمل بالطريقة العادية عن طريق GitHub
+      job.edge = false; job.status = "queued"; job.stage = "نكمل الترجمة… ⏳"; job.created = Date.now();
+      await putJSON(env, jobKey(id), job);
+      const err = await dispatch(env, job, new URL(request.url).origin);
+      if (err) { job.status = "error"; job.error = err; await putJSON(env, jobKey(id), job); }
+      return json({ fallback: true });
+    }
+  }
+  // نعيد قراءة المهمة (ممكن جهاز ثاني ترجم قطعة بنفس الوقت)
+  const fresh = (await getJSON(env, jobKey(id))) || job;
+  const doneNow = new Set(fresh.windows_done || []);
+  if (!doneNow.has(w)) {
+    doneNow.add(w);
+    fresh.segments = [...(fresh.segments || []), ...out].sort((a, b) => a.start - b.start);
+  }
+  fresh.windows_done = [...doneNow].sort((a, b) => a - b);
+  fresh.progress = Math.min(0.99, doneNow.size / total);
+  fresh.stage = `نترجم ${fresh.dialect === "fusha" ? "بالفصحى" : "باللهجة ال" + DIALECTS[fresh.dialect].name} ⚡ (${doneNow.size} من ${total})`;
+  fresh.updated = Date.now();
+  if (doneNow.size >= total) {
+    fresh.status = "done"; fresh.progress = 1; fresh.ready_until = 1e9; fresh.edge = false;
+    fresh.stage = "الترجمة كلها جاهزة ✓ استمتع 🎬";
+    await writeSubs(env, fresh, fresh.dialect, fresh.segments);
+    await env.BUCKET.delete(activeKey(fresh.video_id, fresh.source, fresh.dialect));
+  }
+  await putJSON(env, jobKey(id), fresh);
+  return json({ window: w, segments: out, windows_done: fresh.windows_done, total, done: fresh.status === "done", stage: fresh.stage, progress: fresh.progress });
+}
+
+// ───────── المستخدمين (تمهيداً لإرسال إشعارات للكل لاحقاً) ─────────
+// نحفظ بس رمز الجهاز العشوائي وتواريخ الاستخدام، بدون أي معلومات شخصية
+async function hello(request, env) {
+  const dev = deviceOf(request);
+  if (!dev) return noDevice();
+  let b = {};
+  try { b = JSON.parse((await request.text()).slice(0, 500) || "{}"); } catch {}
+  const key = userKey(dev, "profile.json");
+  const p = (await getJSON(env, key)) || { first: Date.now(), visits: 0 };
+  const today = new Date().toISOString().slice(0, 10);
+  if (p.lastDay !== today) {   // مرة وحدة باليوم بس، عشان ما نكثر الكتابة
+    Object.assign(p, { last: Date.now(), lastDay: today, visits: (p.visits || 0) + 1, app: Boolean(b.app), push: Boolean(b.push) });
+    await putJSON(env, key, p);
+  }
+  return json({ ok: true });
+}
+
+async function adminStats(request, env) {
+  if (!env.ADMIN_KEY || !(await safeEqual(request.headers.get("x-admin-key") || "", env.ADMIN_KEY)))
+    return json({ error: "غير مصرّح" }, 401);
+  let cursor, users = 0, withPush = 0, app = 0, active7 = 0;
+  const week = Date.now() - 7 * 864e5;
+  do {
+    const list = await env.BUCKET.list({ prefix: "users/", cursor, limit: 1000 });
+    for (const o of list.objects || []) {
+      if (!o.key.endsWith("/profile.json")) continue;
+      const p = await getJSON(env, o.key);
+      users++; if (p?.push) withPush++; if (p?.app) app++; if ((p?.last || 0) > week) active7++;
+    }
+    cursor = list.truncated ? list.cursor : undefined;
+  } while (cursor);
+  return json({ users, app, withPush, active7 });
+}
+
 // ───────── المحفوظة (القلب) ─────────
 async function favorites(request, env, key) {
   const dev = deviceOf(request);
@@ -545,6 +641,10 @@ export default {
       if (m && request.method === "GET") return getJob(request, env, m[1], Boolean(m[2]));
       m = path.match(/^\/api\/ingest\/([a-f0-9]{12})$/);
       if (m && request.method === "POST") return ingest(request, env, m[1], ctx);
+      m = path.match(/^\/api\/edge\/([a-f0-9]{12})$/);
+      if (m && request.method === "POST") return edgeStep(request, env, m[1], ctx);
+      if (path === "/api/hello" && request.method === "POST") return hello(request, env);
+      if (path === "/api/admin/stats" && request.method === "GET") return adminStats(request, env);
       m = path.match(/^\/api\/subs\/([a-f0-9]{12})\/([a-z]+)$/);
       if (m && request.method === "POST") return ingestDialect(request, env, m[1], m[2]);
       m = path.match(/^\/api\/media\/([a-f0-9]{12})$/);
