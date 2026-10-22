@@ -242,6 +242,8 @@ input[type=url]{direction:ltr;text-align:left}
 body.cinema{padding:0;overflow:hidden;background:#000;overscroll-behavior:none}
 body.cinema .wrap>*:not(#watch){display:none!important}
 body.cinema #watch>*:not(.stage){display:none}
+/* أي حركة على الصفحة تخلّي الفلم يتقيّد فيها بدل الشاشة كلها، فنشيلها في السينما */
+body.cinema .wrap,body.cinema #watch{animation:none!important;transform:none!important;will-change:auto!important;filter:none!important;opacity:1!important}
 body.cinema .stage{position:fixed;inset:0;width:100vw;height:100dvh;border-radius:0;aspect-ratio:auto;z-index:50}
 @media (orientation:portrait){
   body.cinema:not(.vert) .stage{inset:auto;top:50%;left:50%;width:100dvh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}
@@ -751,7 +753,10 @@ body.cinema .not-cinema{display:none!important}
     $("#watch").classList.remove("hidden");
     if (wasHome) { animate($("#watch"), "screen-in"); if (push) history.pushState({ w: 1 }, "", location.href); }
   }
-  function animate(el, cls) { el.classList.remove("screen-in", "screen-back", "app-in"); void el.offsetWidth; el.classList.add(cls); }
+  function animate(el, cls) {
+    el.classList.remove("screen-in", "screen-back", "app-in"); void el.offsetWidth; el.classList.add(cls);
+    el.addEventListener("animationend", function done(e) { if (e.target !== el) return; el.classList.remove(cls); el.removeEventListener("animationend", done); });
+  }
   async function goHome(fromPop) {
     if (!document.body.classList.contains("watching")) return;
     await savePosition();
