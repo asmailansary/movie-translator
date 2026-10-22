@@ -20,7 +20,7 @@
   --bg:#0d0b09; --surface:#17140f; --surface2:#211c15; --line:#2f2820;
   --text:#f3ece1; --muted:#a59885; --accent:#e0a84a; --accent-ink:#1a1206;
   --danger:#ff7a6b; --heart:#ff5a6e;
-  --sub-size:20px;
+  --sub-size:12px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--text)}
@@ -143,8 +143,10 @@ body.cinema .wrap>*:not(#watch){display:none}
 body.cinema #watch>*:not(.stage){display:none}
 body.cinema .stage{position:fixed;inset:0;width:100vw;height:100dvh;border-radius:0;aspect-ratio:auto;z-index:50}
 @media (orientation:portrait){
-  body.cinema .stage{inset:auto;top:50%;left:50%;width:100dvh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}
+  body.cinema:not(.vert) .stage{inset:auto;top:50%;left:50%;width:100dvh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}
 }
+/* فيديو طولي (Shorts): بمقاسه الصحيح */
+body:not(.cinema) .stage.vert{aspect-ratio:var(--ar,9/16);height:min(72dvh,560px);width:auto;max-width:100%;margin:0 auto}
 body.cinema .subs span{background:none;padding:0;font-size:calc(var(--sub-size) + 6px);line-height:1.45;
   text-shadow:0 0 3px #000,0 0 3px #000,0 2px 4px #000,0 0 10px rgba(0,0,0,.8)}
 body.cinema .subs .orig span{font-size:calc((var(--sub-size) + 6px)*.62)}
@@ -309,7 +311,7 @@ body.cinema .not-cinema{display:none!important}
           <div class="grp"><label>لهجة الترجمة 🗣️</label><div class="chips" id="sDialects"></div></div>
           <div class="grp"><label>سرعة التشغيل ⚡</label><div class="chips" id="sSpeed"></div></div>
           <div class="grp two">
-            <div><label class="q">حجم الخط</label><div class="stepper"><button type="button" data-size="-2">−</button><span id="sizeV">20</span><button type="button" data-size="2">+</button></div></div>
+            <div><label class="q">حجم الخط</label><div class="stepper"><button type="button" data-size="-2">−</button><span id="sizeV">12</span><button type="button" data-size="2">+</button></div></div>
             <div><label class="q">توقيت الترجمة</label><div class="stepper"><button type="button" data-off="-0.25">−</button><span id="offV">0 ث</span><button type="button" data-off="0.25">+</button></div></div>
           </div>
           <div class="grp"><label class="toggle"><input type="checkbox" id="showOrig"> اعرض الكلام الأصلي تحت الترجمة</label></div>
@@ -360,8 +362,8 @@ body.cinema .not-cinema{display:none!important}
 
   let cfg = null, lang = store.get("lang", "auto"), dialect = store.get("dialect", "najdi");
   let job = null, segs = [], pollTimer = null, player = null, ytReady = false, pending = null;
-  let offset = 0, size = store.get("size", 20), showOrig = store.get("orig", false), lastIdx = -1, readyUntil = 0;
-  let favs = [], isFav = false, title = "", duration = 0, speed = 1, jobDone = false;
+  let offset = 0, size = store.get("size2", 12), showOrig = store.get("orig", false), lastIdx = -1, readyUntil = 0;
+  let favs = [], isFav = false, title = "", duration = 0, speed = 1, jobDone = false, aspect = 16 / 9;
 
   // ───── البداية
   if (standalone && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -422,7 +424,7 @@ body.cinema .not-cinema{display:none!important}
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(friendly(r.status, d.error));
       lang = src; dialect = dia; renderChips();
-      openJob(d.job_id, d.video_id, resumeAt || 0);
+      openJob(d.job_id, d.video_id, resumeAt || 0, /\/shorts\//.test(url));
     } catch (err) { showErr(err.message); window.scrollTo({ top: 0, behavior: "smooth" }); }
     finally { btn.disabled = false; btn.textContent = "ترجم وشغّل 🎬"; }
   }
@@ -432,8 +434,9 @@ body.cinema .not-cinema{display:none!important}
   });
 
   function resetSubs() { segs = []; lastIdx = -1; readyUntil = 0; jobDone = false; $("#subs").innerHTML = ""; }
-  function openJob(id, vid, resumeAt) {
+  function openJob(id, vid, resumeAt, vertHint) {
     job = { id, vid }; resetSubs(); title = ""; duration = 0;
+    aspect = 0; setAspect(vertHint ? 9 / 16 : 16 / 9);
     $("#form").classList.add("hidden"); $("#favBox").classList.add("hidden");
     $("#installTip").classList.add("hidden"); $("#pushTip").classList.add("hidden");
     $("#watch").classList.remove("hidden");
@@ -472,6 +475,7 @@ body.cinema .not-cinema{display:none!important}
       readyUntil = d.ready_until || 0;
       if (d.title) { title = d.title; $("#ttl").textContent = title; }
       if (d.duration) duration = d.duration;
+      if (d.aspect) setAspect(d.aspect);
       $("#stage-text").textContent = d.status === "error" ? d.error : d.stage;
       $("#stage-text").classList.toggle("err", d.status === "error");
       $("#pct").textContent = d.status === "error" ? "" : Math.round(d.progress * 100) + "%";
@@ -545,10 +549,19 @@ body.cinema .not-cinema{display:none!important}
   function layout() {
     const f = stage.querySelector("iframe"); if (!f) return;
     const W = stage.clientWidth, H = stage.clientHeight;
-    const vw = Math.min(W, H * 16 / 9), vh = vw * 9 / 16;
+    const vw = Math.min(W, H * aspect), vh = vw / aspect;
     Object.assign(f.style, { width: vw + "px", height: vh * 3 + "px", left: (W - vw) / 2 + "px", top: (H - vh) / 2 - vh + "px" });
   }
   new ResizeObserver(layout).observe(stage);
+  const isRotated = () => document.body.classList.contains("cinema") && !document.body.classList.contains("vert") && matchMedia("(orientation:portrait)").matches;
+  function setAspect(a) {
+    if (!a || !isFinite(a) || Math.abs(a - aspect) < 0.01) return;
+    aspect = a;
+    const vert = a < 1;
+    stage.classList.toggle("vert", vert); document.body.classList.toggle("vert", vert);
+    stage.style.setProperty("--ar", String(a));
+    layout(); lastIdx = -2;
+  }
 
   const now = () => { try { return player?.getCurrentTime?.() || 0; } catch { return 0; } };
   const total = () => { try { return player?.getDuration?.() || duration || 0; } catch { return duration || 0; } };
@@ -567,14 +580,13 @@ body.cinema .not-cinema{display:none!important}
   // الأزرار تختفي بعد ٣ ثواني
   let uiTimer = null;
   function showUI(stay) { stage.classList.add("ui"); clearTimeout(uiTimer); if (!stay) uiTimer = setTimeout(() => { if (playing() && !dragging) stage.classList.remove("ui"); }, 3000); }
-  function hideUI() { if (playing()) stage.classList.remove("ui"); }
+  function hideUI() { clearTimeout(uiTimer); stage.classList.remove("ui"); }
 
   // لمسة وحدة = تظهر/تختفي الأزرار، لمستين = تقديم/رجوع ١٠ ثواني
   let lastTap = 0, lastSide = 9, tapTimer = null, streak = 0, streakSide = 0;
   function localX(e) {
     const r = stage.getBoundingClientRect();
-    const rotated = document.body.classList.contains("cinema") && matchMedia("(orientation:portrait)").matches;
-    return rotated ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+    return isRotated() ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
   }
   $("#touch").addEventListener("pointerup", e => {
     const x = localX(e), side = x < 0.35 ? -1 : x > 0.65 ? 1 : 0, t = Date.now();
@@ -601,8 +613,7 @@ body.cinema .not-cinema{display:none!important}
   const pbar = $("#pbar");
   function pbarFrac(e) {
     const r = pbar.getBoundingClientRect();
-    const rotated = document.body.classList.contains("cinema") && matchMedia("(orientation:portrait)").matches;
-    const f = rotated ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
+    const f = isRotated() ? (e.clientY - r.top) / r.height : (e.clientX - r.left) / r.width;
     return Math.max(0, Math.min(1, f));
   }
   function paintBar(f) { $("#pfill").style.width = f * 100 + "%"; $("#pknob").style.left = f * 100 + "%"; }
@@ -660,7 +671,7 @@ body.cinema .not-cinema{display:none!important}
   renderSpeed();
   function applySize() { document.documentElement.style.setProperty("--sub-size", size + "px"); $("#sizeV").textContent = size; }
   applySize();
-  document.querySelectorAll("[data-size]").forEach(b => b.onclick = () => { size = Math.min(40, Math.max(12, size + +b.dataset.size)); store.set("size", size); applySize(); lastIdx = -2; });
+  document.querySelectorAll("[data-size]").forEach(b => b.onclick = () => { size = Math.min(40, Math.max(12, size + +b.dataset.size)); store.set("size2", size); applySize(); lastIdx = -2; });
   document.querySelectorAll("[data-off]").forEach(b => b.onclick = () => {
     offset = Math.round((offset + +b.dataset.off) * 100) / 100;
     $("#offV").textContent = (offset > 0 ? "+" : "") + offset + " ث"; lastIdx = -2;
@@ -676,7 +687,7 @@ body.cinema .not-cinema{display:none!important}
     if (on) {
       window.scrollTo(0, 0); showUI();
       try { screen.orientation?.lock?.("landscape").catch(() => {}); } catch {}
-      if (matchMedia("(orientation:portrait)").matches && !store.get("seenClockTip", false)) {
+      if (isRotated() && !store.get("seenClockTip", false)) {
         store.set("seenClockTip", true);
         setTimeout(() => toast("💡 تبي تختفي الساعة فوق؟ افتح قفل التدوير واقلب جوالك"), 600);
       }

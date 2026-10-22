@@ -176,6 +176,7 @@ async function createJob(request, env) {
     return json({ error: "طلب غير صالح." }, 400);
   }
   const vid = extractVideoId(String(body.url || ""));
+  const shortsHint = /\/shorts\//.test(String(body.url || ""));
   const source = body.source || "auto";
   const dialect = body.dialect || "najdi";
   if (!vid) return json({ error: "الرابط مو رابط فيديو يوتيوب صحيح." }, 400);
@@ -215,7 +216,7 @@ async function createJob(request, env) {
   }
   const id = newId();
   const job = {
-    id, video_id: vid, source, dialect, status: "queued", reuse, owners: [dev],
+    id, video_id: vid, source, dialect, status: "queued", reuse, owners: [dev], aspect: shortsHint ? 0.5625 : 0,
     stage: reuse ? `نترجم ${dialect === "fusha" ? "بالفصحى" : "باللهجة ال" + DIALECTS[dialect].name} ⚡` : "نجهّز لك الفلم… 🍿", progress: 0.01,
     title: "", duration: 0, ready_until: 0, error: null, segments: [],
     created: Date.now(), updated: Date.now(),
@@ -246,7 +247,7 @@ async function source(request, env, id) {
   const subs = await getJSON(env, job.reuse);
   if (!subs) return json({ error: "not found" }, 404);
   return json({
-    title: subs.title || "", duration: subs.duration || 0,
+    title: subs.title || "", duration: subs.duration || 0, aspect: subs.aspect || 0,
     segments: (subs.segments || []).map(({ start, end, src }) => ({ start, end, src })),
   });
 }
@@ -259,6 +260,7 @@ async function loadJob(env, id) {
     job.segments = subs?.segments || [];
     job.title = subs?.title || job.title;
     job.duration = subs?.duration || 0;
+    job.aspect = subs?.aspect || 0;
   }
   return checkTimeouts(job);
 }
@@ -279,7 +281,7 @@ async function getJob(request, env, id, wantSrt) {
   const segs = job.segments || [];
   return json({
     video_id: job.video_id, source: job.source, dialect: job.dialect, status: job.status, stage: job.status === "error" ? job.error : job.stage,
-    progress: job.progress || 0, title: job.title || "", duration: job.duration || 0,
+    progress: job.progress || 0, title: job.title || "", duration: job.duration || 0, aspect: job.aspect || 0,
     error: job.error || null, ready_until: job.ready_until || 0,
     total: segs.length, since, segments: segs.slice(since),
   });
@@ -291,7 +293,7 @@ async function ingest(request, env, id, ctx) {
   const job = await getJSON(env, jobKey(id));
   if (!job) return json({ error: "not found" }, 404);
   const p = await request.json();
-  for (const k of ["status", "stage", "progress", "title", "duration", "ready_until", "error"])
+  for (const k of ["status", "stage", "progress", "title", "duration", "ready_until", "error", "aspect"])
     if (p[k] !== undefined) job[k] = p[k];
   if (Array.isArray(p.append)) {
     for (const s of p.append)
@@ -318,7 +320,7 @@ async function ingest(request, env, id, ctx) {
   if (job.status === "done") {
     await env.BUCKET.put(
       subsKey(job.video_id, job.source, job.dialect),
-      JSON.stringify({ video_id: job.video_id, title: job.title, duration: job.duration, segments: job.segments }),
+      JSON.stringify({ video_id: job.video_id, title: job.title, duration: job.duration, aspect: job.aspect || 0, segments: job.segments }),
       { httpMetadata: { contentType: "application/json" }, customMetadata: { title: (job.title || "").slice(0, 200) } }
     );
   }

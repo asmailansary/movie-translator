@@ -198,6 +198,8 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None):
     files = [p for p in workdir.glob(f"{stem}.*") if p.suffix not in (".part", ".ytdl")]
     if not files:
         raise UserError("ما قدرنا نجيب صوت الفلم 😕 جرّب مرة ثانية")
+    w, h = info.get("width") or 0, info.get("height") or 0
+    _ROUTE["aspect"] = round(w / h, 4) if w and h else (info.get("aspect_ratio") or 0)
     return files[0], info.get("title") or "", info.get("duration") or 0
 
 
@@ -590,7 +592,7 @@ def run_reuse():
     report(status="running", stage="نترجم بلهجتك الجديدة ⚡", progress=0.05)
     data = fetch_source()
     title, duration, segs = data.get("title", ""), data.get("duration", 0), data.get("segments") or []
-    report(title=title, duration=duration)
+    report(title=title, duration=duration, aspect=data.get("aspect") or 0)
     system = build_system_prompt(DIALECT, title)
     groups = {}
     for sg in segs:
@@ -628,7 +630,7 @@ def run():
     # ١) نسحب الصوت بس (بدون فيديو) — سريع حتى لفلم ساعتين
     audio, title, duration = download_audio(VIDEO_ID, workdir, stem="audio")
     total = max(1, -(-int(duration or CHUNK_SECONDS) // CHUNK_SECONDS))
-    report(title=title, duration=duration, stage="نسمع أول ١٠ دقايق ونترجمها ✍️", progress=0.06)
+    report(title=title, duration=duration, aspect=_ROUTE.get("aspect") or 0, stage="نسمع أول ١٠ دقايق ونترجمها ✍️", progress=0.06)
 
     system = build_system_prompt(DIALECT, title)
     lang = SOURCE_LANGS[SOURCE]["code"]
