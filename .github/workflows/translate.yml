@@ -1,0 +1,64 @@
+# يشتغل لما الـ Worker في Cloudflare يطلب ترجمة فلم
+name: translate
+run-name: ترجمة فلم
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        required: true
+        type: string
+      video_id:
+        required: true
+        type: string
+      source:
+        required: false
+        default: auto
+        type: string
+      dialect:
+        required: false
+        default: najdi
+        type: string
+      callback:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # yt-dlp يحتاج deno عشان يقرأ يوتيوب
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: تثبيت الأدوات
+        run: |
+          which ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          pip install -q -U "yt-dlp[default]"
+
+      - name: تحميل وتفريغ وترجمة
+        # المدخلات تمر كمتغيرات بيئة (مو داخل السكربت) عشان الأمان
+        env:
+          JOB_ID: ${{ inputs.job_id }}
+          VIDEO_ID: ${{ inputs.video_id }}
+          SOURCE: ${{ inputs.source }}
+          DIALECT: ${{ inputs.dialect }}
+          CALLBACK: ${{ inputs.callback }}
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+        run: python pipeline/translate.py

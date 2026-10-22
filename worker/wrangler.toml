@@ -1,0 +1,20 @@
+# إعدادات Worker مترجم الأفلام على Cloudflare
+name = "movie-translator"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# مخزن الترجمات (أنشئه من Cloudflare → R2 بنفس الاسم)
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "movie-translator"
+
+[vars]
+GH_REPO = "asmailansary/movie-translator"
+GH_BRANCH = "main"
+
+[observability]
+enabled = true

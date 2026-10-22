@@ -1,7 +1,8 @@
 """
-مترجم أفلام يوتيوب — الخادم
-يسحب صوت الفلم من يوتيوب، يفرّغه لنص (Groq Whisper — مجاني)، ويترجمه للعربية/اللهجات (Gemini — مجاني، و Groq احتياط)،
-ثم يرسل الترجمة للواجهة لتظهر متزامنة مع الفلم.
+مترجم الأفلام — الجزء اللي يشتغل على GitHub Actions
+يحمّل صوت الفلم من يوتيوب، يفرّغه لنص (Groq Whisper — مجاني)،
+يترجمه للعربية/اللهجات (Gemini — مجاني، و Groq احتياط)،
+ويرسل الترجمة لـ Cloudflare أول بأول عشان تقدر تبدأ المشاهدة بسرعة.
 
 يعتمد فقط على مكتبات بايثون الأساسية + yt-dlp + ffmpeg.
 """
@@ -9,9 +10,8 @@ import json
 import os
 import queue
 import re
-import secrets
-import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -20,31 +20,30 @@ import urllib.error
 import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
-# ───────────────────────── الإعدادات (من متغيرات البيئة) ─────────────────────────
+# ───────────────────────── الإعدادات ─────────────────────────
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()          # مجاني: التفريغ الصوتي (+ ترجمة احتياطية)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()      # مجاني: الترجمة الأساسية
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()  # اختياري (مدفوع): أعلى جودة
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip()          # فاضي = يختار أحدث موديل Flash تلقائياً
-GROQ_LLM_MODEL = os.environ.get("GROQ_LLM_MODEL", "openai/gpt-oss-120b").strip()
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5").strip()
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "whisper-large-v3").strip()
+GROQ_LLM_MODEL = os.environ.get("GROQ_LLM_MODEL", "").strip() or "openai/gpt-oss-120b"
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "").strip() or "claude-sonnet-5-5"
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "").strip() or "whisper-large-v3"
 YT_COOKIES = os.environ.get("YT_COOKIES", "")
-MAX_MINUTES = int(os.environ.get("MAX_MINUTES", "240"))
-MAX_PARALLEL_JOBS = int(os.environ.get("MAX_PARALLEL_JOBS", "2"))
-PORT = int(os.environ.get("PORT", "8000"))
-DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
-STATIC_DIR = Path(__file__).parent / "static"
+MAX_MINUTES = int(os.environ.get("MAX_MINUTES", "").strip() or "240")
+
+JOB_ID = os.environ.get("JOB_ID", "").strip()
+VIDEO_ID = os.environ.get("VIDEO_ID", "").strip()
+SOURCE = os.environ.get("SOURCE", "auto").strip()
+DIALECT = os.environ.get("DIALECT", "najdi").strip()
+CALLBACK = os.environ.get("CALLBACK", "").strip().rstrip("/")
+INGEST_SECRET = os.environ.get("INGEST_SECRET", "").strip()
 
 CHUNK_SECONDS = 600          # نقسم الصوت قطع كل وحدة 10 دقائق
 TRANSLATE_BATCH = 50         # عدد الجمل في كل طلب ترجمة
 TRANSLATE_WORKERS = 2        # قليل عشان ما نتعدى حدود الخطط المجانية
-
-DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 SOURCE_LANGS = {
     "auto": {"name": "تلقائي", "code": None},
@@ -103,11 +102,6 @@ DIALECTS = {
     },
 }
 
-# ───────────────────────── تخزين المهام ─────────────────────────
-JOBS: dict = {}
-JOBS_LOCK = threading.Lock()
-JOB_SLOTS = threading.Semaphore(MAX_PARALLEL_JOBS)
-
 YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
@@ -137,13 +131,6 @@ def extract_video_id(url: str):
     return vid if vid and YT_ID_RE.match(vid) else None
 
 
-def cache_path(vid, src, dialect):
-    return DATA_DIR / f"{vid}__{src}__{dialect}.json"
-
-
-def update_job(job_id, **kw):
-    with JOBS_LOCK:
-        JOBS[job_id].update(kw)
 
 
 # ───────────────────────── 1) تحميل الصوت ─────────────────────────
@@ -444,234 +431,129 @@ def translate_batch(segs, system, context):
     return [s["src"] for s in segs]   # آخر حل: النص الأصلي بدل ما يضيع
 
 
-# ───────────────────────── تشغيل المهمة كاملة ─────────────────────────
+# ───────────────────────── إرسال التقدم لـ Cloudflare ─────────────────────────
 class UserError(Exception):
     pass
 
 
-def run_job(job_id, vid, src, dialect):
-    with JOB_SLOTS:
-        workdir = Path(tempfile.mkdtemp(prefix="mt_"))
+def report(**payload):
+    """يرسل حالة المهمة (والجمل الجديدة) للـ Worker."""
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    for attempt in range(5):
+        req = urllib.request.Request(
+            f"{CALLBACK}/api/ingest/{JOB_ID}", data=body, method="POST",
+            headers={"Content-Type": "application/json", "X-Ingest-Secret": INGEST_SECRET,
+                     "User-Agent": "movie-translator-pipeline"},
+        )
         try:
-            update_job(job_id, status="running", stage="تحميل صوت الفلم من يوتيوب…", progress=0.03)
-            audio, title, duration = download_audio(vid, workdir)
-            update_job(job_id, title=title, duration=duration, stage="تجهيز الصوت…", progress=0.1)
+            with urllib.request.urlopen(req, timeout=60) as r:
+                r.read()
+                return
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403, 404):
+                raise RuntimeError(f"Cloudflare رفض التحديث (HTTP {e.code}) — تأكد إن INGEST_SECRET نفسه في الجهتين.")
+        except (urllib.error.URLError, TimeoutError):
+            pass
+        time.sleep(3 * (attempt + 1))
+    raise RuntimeError("ما قدرت أوصل لـ Cloudflare.")
 
-            chunks = split_audio(audio, workdir)
-            total = len(chunks)
-            system = build_system_prompt(dialect, title)
-            lang = SOURCE_LANGS[src]["code"]
 
-            # التفريغ يشتغل بخيط لحاله، والترجمة تمشي وراه قطعة قطعة
-            q: queue.Queue = queue.Queue()
+def validate_inputs():
+    if not re.fullmatch(r"[a-f0-9]{12}", JOB_ID):
+        sys.exit("JOB_ID غير صالح")
+    if not YT_ID_RE.match(VIDEO_ID):
+        sys.exit("VIDEO_ID غير صالح")
+    if SOURCE not in SOURCE_LANGS or DIALECT not in DIALECTS:
+        sys.exit("اللغة أو اللهجة غير صحيحة")
+    u = urlparse(CALLBACK)
+    if u.scheme != "https" or not u.hostname or u.path not in ("", "/"):
+        sys.exit("CALLBACK غير صالح")
+    if not INGEST_SECRET:
+        sys.exit("INGEST_SECRET ناقص")
+    if not GROQ_API_KEY:
+        raise UserError("مفتاح GROQ_API_KEY ناقص في أسرار GitHub.")
+    if not (GEMINI_API_KEY or ANTHROPIC_API_KEY):
+        print("ℹ️  ما فيه GEMINI_API_KEY — الترجمة بتكون عن طريق Groq (جودة اللهجات أقل).")
 
-            def transcriber():
-                try:
-                    for path, offset in chunks:
-                        q.put(("ok", split_long_segments(transcribe_chunk(path, offset, lang))))
-                except Exception as e:  # noqa: BLE001
-                    q.put(("err", e))
-                q.put(("done", None))
 
-            threading.Thread(target=transcriber, daemon=True).start()
+# ───────────────────────── تشغيل المهمة كاملة ─────────────────────────
+def run():
+    workdir = Path(tempfile.mkdtemp(prefix="mt_"))
+    report(status="running", stage="تحميل صوت الفلم من يوتيوب…", progress=0.03)
+    audio, title, duration = download_audio(VIDEO_ID, workdir)
+    report(title=title, duration=duration, stage="تجهيز الصوت…", progress=0.08)
 
-            done_chunks, context, pool = 0, [], ThreadPoolExecutor(TRANSLATE_WORKERS)
-            while True:
-                kind, val = q.get()
-                if kind == "err":
-                    raise val
-                if kind == "done":
-                    break
-                segs = val
-                batches = [segs[i: i + TRANSLATE_BATCH] for i in range(0, len(segs), TRANSLATE_BATCH)]
-                futures = []
-                for bi, batch in enumerate(batches):
-                    ctx = context if bi == 0 else [s["src"] for s in batches[bi - 1][-3:]]
-                    futures.append(pool.submit(translate_batch, batch, system, ctx))
-                for batch, fut in zip(batches, futures):
-                    for s, ar in zip(batch, fut.result()):
-                        s["ar"] = ar
-                    with JOBS_LOCK:
-                        JOBS[job_id]["segments"].extend(batch)
-                if segs:
-                    context = [s["src"] for s in segs[-3:]]
-                done_chunks += 1
-                update_job(
-                    job_id,
-                    stage=f"ترجمة… ({done_chunks} من {total})",
-                    progress=round(0.1 + 0.9 * done_chunks / max(total, 1), 3),
-                    ready_until=chunks[done_chunks][1] if done_chunks < total else (duration or 10**9),
-                )
-            pool.shutdown()
+    chunks = split_audio(audio, workdir)
+    total = len(chunks)
+    system = build_system_prompt(DIALECT, title)
+    lang = SOURCE_LANGS[SOURCE]["code"]
 
-            with JOBS_LOCK:
-                job = JOBS[job_id]
-                result = {"video_id": vid, "title": job.get("title", ""), "source": src, "dialect": dialect,
-                          "duration": duration, "segments": job["segments"], "created": time.time()}
-            cache_path(vid, src, dialect).write_text(json.dumps(result, ensure_ascii=False))
-            update_job(job_id, status="done", stage="خلصت الترجمة ✓", progress=1.0, ready_until=10**9)
-        except UserError as e:
-            update_job(job_id, status="error", error=str(e))
+    # التفريغ يشتغل بخيط لحاله، والترجمة تمشي وراه قطعة قطعة
+    q: queue.Queue = queue.Queue()
+
+    def transcriber():
+        try:
+            for path, offset in chunks:
+                q.put(("ok", split_long_segments(transcribe_chunk(path, offset, lang))))
         except Exception as e:  # noqa: BLE001
-            traceback.print_exc()
-            msg = str(e)
-            if "Sign in to confirm" in msg or "bot" in msg.lower():
-                msg = "يوتيوب منع الخادم من تحميل الفلم (يحسبه روبوت). شوف قسم «الكوكيز» في دليل التشغيل."
-            elif "Private video" in msg or "unavailable" in msg.lower():
-                msg = "الفلم خاص أو غير متاح."
-            else:
-                msg = "صار خطأ أثناء المعالجة: " + msg[:300]
-            update_job(job_id, status="error", error=msg)
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
+            q.put(("err", e))
+        q.put(("done", None))
+
+    threading.Thread(target=transcriber, daemon=True).start()
+
+    done_chunks, context, pool = 0, [], ThreadPoolExecutor(TRANSLATE_WORKERS)
+    while True:
+        kind, val = q.get()
+        if kind == "err":
+            raise val
+        if kind == "done":
+            break
+        segs = val
+        batches = [segs[i: i + TRANSLATE_BATCH] for i in range(0, len(segs), TRANSLATE_BATCH)]
+        futures = []
+        for bi, batch in enumerate(batches):
+            ctx = context if bi == 0 else [s["src"] for s in batches[bi - 1][-3:]]
+            futures.append(pool.submit(translate_batch, batch, system, ctx))
+        for batch, fut in zip(batches, futures):
+            for s, ar in zip(batch, fut.result()):
+                s["ar"] = ar
+        if segs:
+            context = [s["src"] for s in segs[-3:]]
+        done_chunks += 1
+        last = done_chunks >= total
+        report(
+            append=segs,
+            stage="خلصت الترجمة ✓" if last else f"ترجمة… ({done_chunks} من {total})",
+            progress=1.0 if last else round(0.08 + 0.92 * done_chunks / max(total, 1), 3),
+            ready_until=10**9 if last else chunks[done_chunks][1],
+            **({"status": "done"} if last else {}),
+        )
+    pool.shutdown()
+    if total == 0:
+        report(status="done", stage="خلصت الترجمة ✓", progress=1.0, ready_until=10**9)
 
 
-def start_job(vid, src, dialect):
-    key = (vid, src, dialect)
-    with JOBS_LOCK:
-        for jid, j in JOBS.items():
-            if j["key"] == key and j["status"] in ("queued", "running", "done"):
-                return jid
-        jid = uuid.uuid4().hex[:12]
-        JOBS[jid] = {"key": key, "video_id": vid, "status": "queued", "stage": "بالانتظار…", "progress": 0.0,
-                     "segments": [], "title": "", "duration": 0, "error": None, "ready_until": 0,
-                     "created": time.time()}
-
-    cached = cache_path(vid, src, dialect)
-    if cached.exists():
-        data = json.loads(cached.read_text())
-        update_job(jid, status="done", stage="جاهزة (محفوظة من قبل) ✓", progress=1.0, segments=data["segments"],
-                   title=data.get("title", ""), duration=data.get("duration", 0), ready_until=10**9)
-    else:
-        threading.Thread(target=run_job, args=(jid, vid, src, dialect), daemon=True).start()
-    return jid
-
-
-def to_srt(segments):
-    def ts(t):
-        ms = int(round(t * 1000))
-        h, ms = divmod(ms, 3600000)
-        m, ms = divmod(ms, 60000)
-        s, ms = divmod(ms, 1000)
-        return f"{h:02}:{m:02}:{s:02},{ms:03}"
-    lines, n = [], 0
-    for s in segments:
-        if not s.get("ar"):
-            continue
-        n += 1
-        lines += [str(n), f"{ts(s['start'])} --> {ts(s['end'])}", "‫" + s["ar"] + "‬", ""]
-    return "\n".join(lines)
-
-
-# ───────────────────────── خادم الويب ─────────────────────────
-class Handler(BaseHTTPRequestHandler):
-    server_version = "MovieTranslator/1.0"
-
-    def log_message(self, fmt, *args):
-        print("%s - %s" % (self.address_string(), fmt % args))
-
-    def send_json(self, obj, code=200):
-        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.security_headers()
-        self.end_headers()
-        self.wfile.write(body)
-
-    def security_headers(self):
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-        self.send_header("X-Frame-Options", "DENY")
-
-    def authorized(self):
-        if not APP_PASSWORD:
-            return False
-        given = self.headers.get("X-App-Password", "")
-        return secrets.compare_digest(given.encode(), APP_PASSWORD.encode())
-
-    def do_GET(self):
-        u = urlparse(self.path)
-        if u.path in ("/", "/index.html"):
-            return self.serve_static("index.html", "text/html; charset=utf-8")
-        if u.path == "/api/health":
-            return self.send_json({"ok": True})
-        if u.path == "/api/config":
-            return self.send_json({
-                "languages": {k: v["name"] for k, v in SOURCE_LANGS.items()},
-                "dialects": {k: {"name": v["name"], "group": v["group"]} for k, v in DIALECTS.items()},
-                "ready": bool(GROQ_API_KEY and APP_PASSWORD),
-            })
-        m = re.fullmatch(r"/api/jobs/([a-f0-9]{12})(/srt)?", u.path)
-        if m:
-            if not self.authorized():
-                return self.send_json({"error": "كلمة المرور غير صحيحة."}, 401)
-            with JOBS_LOCK:
-                job = JOBS.get(m.group(1))
-                if not job:
-                    return self.send_json({"error": "المهمة غير موجودة (يمكن الخادم أعاد التشغيل)."}, 404)
-                since = int((parse_qs(u.query).get("since") or ["0"])[0] or 0)
-                snap = {k: job[k] for k in ("video_id", "status", "stage", "progress", "title", "duration",
-                                            "error", "ready_until")}
-                snap["total"] = len(job["segments"])
-                snap["segments"] = job["segments"][since:]
-                snap["since"] = since
-            if m.group(2):
-                body = to_srt(job["segments"]).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/x-subrip; charset=utf-8")
-                self.send_header("Content-Disposition", f'attachment; filename="{job["video_id"]}.ar.srt"')
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                return self.wfile.write(body)
-            return self.send_json(snap)
-        self.send_json({"error": "غير موجود"}, 404)
-
-    def do_POST(self):
-        if urlparse(self.path).path != "/api/jobs":
-            return self.send_json({"error": "غير موجود"}, 404)
-        if not (GROQ_API_KEY and APP_PASSWORD):
-            return self.send_json({"error": "الخادم ناقصه إعدادات (المفاتيح أو كلمة المرور). راجع دليل التشغيل."}, 503)
-        if not self.authorized():
-            time.sleep(1)
-            return self.send_json({"error": "كلمة المرور غير صحيحة."}, 401)
-        try:
-            length = min(int(self.headers.get("Content-Length") or 0), 10_000)
-            data = json.loads(self.rfile.read(length) or b"{}")
-        except (ValueError, json.JSONDecodeError):
-            return self.send_json({"error": "طلب غير صالح."}, 400)
-        vid = extract_video_id(str(data.get("url", "")))
-        src = data.get("source", "auto")
-        dialect = data.get("dialect", "najdi")
-        if not vid:
-            return self.send_json({"error": "الرابط مو رابط فيديو يوتيوب صحيح."}, 400)
-        if src not in SOURCE_LANGS or dialect not in DIALECTS:
-            return self.send_json({"error": "اختيار اللغة أو اللهجة غير صحيح."}, 400)
-        jid = start_job(vid, src, dialect)
-        self.send_json({"job_id": jid, "video_id": vid})
-
-    def serve_static(self, name, ctype):
-        p = STATIC_DIR / name
-        body = p.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-        self.end_headers()
-        self.wfile.write(body)
+def friendly_error(e):
+    msg = str(e)
+    if isinstance(e, UserError):
+        return msg
+    if "Sign in to confirm" in msg or "not a bot" in msg:
+        return "يوتيوب منع GitHub من تحميل الفلم (يحسبه روبوت). شوف قسم «الكوكيز» في الدليل."
+    if "Private video" in msg or "Video unavailable" in msg:
+        return "الفلم خاص أو غير متاح."
+    return "صار خطأ أثناء المعالجة: " + msg[:300]
 
 
 def main():
-    missing = [n for n, v in (("GROQ_API_KEY", GROQ_API_KEY), ("APP_PASSWORD", APP_PASSWORD)) if not v]
-    if not GEMINI_API_KEY:
-        print("ℹ️  ما فيه GEMINI_API_KEY — الترجمة بتكون عن طريق Groq (جودة اللهجات أقل).")
-    if missing:
-        print("⚠️  متغيرات ناقصة:", ", ".join(missing), "— الترجمة ما راح تشتغل حتى تضيفها.")
-    print(f"✓ الخادم شغّال على المنفذ {PORT}")
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    validate_inputs()
+    try:
+        run()
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        try:
+            report(status="error", error=friendly_error(e))
+        finally:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
