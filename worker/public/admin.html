@@ -81,6 +81,15 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
 .colors button{width:38px;height:38px;border-radius:50%;border:3px solid transparent}
 .colors button[aria-pressed=true]{border-color:var(--text)}
 .colors input[type=color]{width:44px;height:40px;border:0;background:none;padding:0}
+.bgs{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.bgs button{width:58px;height:58px;border-radius:16px;border:3px solid transparent;display:grid;place-items:end center;padding-bottom:4px;font-size:10px;color:#fff9}
+.bgs button[aria-pressed=true]{border-color:var(--accent)}
+.bgs input[type=color]{width:58px;height:58px;border:0;background:none;padding:0}
+.bgprev{margin-top:12px;border-radius:16px;padding:16px;border:1px solid #fff2}
+.bgprev .pc{border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:4px;border:1px solid #fff2}
+.bgprev b{font-family:"Reem Kufi",sans-serif;font-size:22px;color:var(--accent)}
+.bgprev small{color:#fffa;font-size:12px}
+.bgprev .pbtn{align-self:flex-start;margin-top:8px;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:6px 12px;font-size:13px;font-weight:700}
 .iconbox{display:flex;align-items:center;gap:14px}
 .iconbox img{width:84px;height:84px;border-radius:20px;object-fit:cover;border:1px solid var(--line);background:var(--surface2)}
 .num{display:flex;align-items:center;gap:8px}
@@ -162,6 +171,11 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     <div class="card">
       <h2>لون الأداة 🎨</h2>
       <div class="colors" id="colors"></div>
+    </div>
+    <div class="card">
+      <h2>خلفية الوضع الليلي 🌌</h2>
+      <div class="bgs" id="bgs"></div>
+      <div class="bgprev" id="bgPrev"><div class="pc"><b>فهّمني</b><small>كذا بتطلع البطاقات والخلفية</small><span class="pbtn">ترجم وشغّل 🎬</span></div></div>
     </div>
     <div class="card">
       <h2>الاسم والوصف ✍️</h2>
@@ -267,6 +281,7 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
   const toast = m => { const t = $("#toast"); t.textContent = m; t.classList.add("on"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2400); };
 
   const DIALECTS = { fusha: "الفصحى", najdi: "نجدية", hijazi: "حجازية", khaleeji: "خليجية", yemeni: "يمنية", egyptian: "مصرية", shami: "شامية", iraqi: "عراقية" };
+  const BGS = [["#0d0b09", "بني"], ["#121214", "فحمي"], ["#0f1730", "كحلي"], ["#0b1229", "ليلي"], ["#16112a", "بنفسجي"], ["#1a1020", "توتي"], ["#0b1a17", "زمردي"], ["#0f1419", "رمادي"]];
   const COLORS = ["#e0a84a", "#e8735a", "#d9577b", "#9b7be0", "#4f8ff0", "#2fb4a6", "#5cb85c", "#c9a227"];
   const TEXTS = {
     movie_label: "عنوان خانة رابط الفلم", clip_label: "عنوان خانة رابط المقطع", go_btn: "زر الترجمة",
@@ -335,6 +350,11 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     document.documentElement.setAttribute("data-theme", t);
     document.documentElement.style.setProperty("--accent", accent);
   }
+  function paintPrev() {
+    const bg = val("dark_bg") || "#0d0b09";
+    $("#bgPrev").style.background = bg;
+    $("#bgPrev .pc").style.background = `color-mix(in srgb,${bg} 90%,#fff)`;
+  }
   function chip(text, on, fn) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.setAttribute("aria-pressed", String(on)); b.onclick = fn; return b; }
 
   function render() {
@@ -349,6 +369,13 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     const cbox = $("#colors"); cbox.innerHTML = "";
     for (const c of COLORS) { const b = document.createElement("button"); b.type = "button"; b.style.background = c; b.setAttribute("aria-pressed", String(c === val("accent"))); b.setAttribute("aria-label", c);
       b.onclick = () => { set("accent", c); applyTheme(val("theme"), c); render(); }; cbox.append(b); }
+    // خلفية الوضع الليلي
+    const bbox = $("#bgs"); bbox.innerHTML = "";
+    for (const [c, n] of BGS) { const b = document.createElement("button"); b.type = "button"; b.style.background = c; b.textContent = n; b.setAttribute("aria-pressed", String(c === val("dark_bg")));
+      b.onclick = () => { set("dark_bg", c); render(); }; bbox.append(b); }
+    const bpick = document.createElement("input"); bpick.type = "color"; bpick.value = val("dark_bg") || "#0d0b09";
+    bpick.oninput = () => { set("dark_bg", bpick.value); paintPrev(); }; bbox.append(bpick);
+    paintPrev();
     const pick = document.createElement("input"); pick.type = "color"; pick.value = val("accent");
     pick.oninput = () => { set("accent", pick.value); applyTheme(val("theme"), pick.value); }; cbox.append(pick);
     // حقول نصية وأرقام ومفاتيح

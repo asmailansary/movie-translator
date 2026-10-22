@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   custom_tap: false,        // صوت نقر مرفوع من الأدمن؟
   tap_v: 0,
   accent: "#e0a84a",
+  dark_bg: "#0d0b09",       // لون خلفية الوضع الليلي
   icon_v: 0,                // يزيد كل ما تغيّرت الأيقونة
   custom_icon: false,       // فيه أيقونة مرفوعة من الأدمن؟
   snap_url: "https://snapchat.com/t/T4QBeB0D",
@@ -75,6 +76,7 @@ function clean(input, current) {
   if ("splash" in input) out.splash = str(input.splash, 120);
   if ("theme" in input && ["dark", "light", "auto"].includes(input.theme)) out.theme = input.theme;
   if ("accent" in input && /^#[0-9a-fA-F]{6}$/.test(input.accent)) out.accent = input.accent;
+  if ("dark_bg" in input && /^#[0-9a-fA-F]{6}$/.test(input.dark_bg)) out.dark_bg = input.dark_bg;
   if ("snap_url" in input) {
     const u = str(input.snap_url, 200);
     out.snap_url = /^https:\/\/([a-z0-9-]+\.)*snapchat\.com\//i.test(u) ? u : current.snap_url;
@@ -258,7 +260,7 @@ export async function serveIcon(request, env, size) {
 export async function serveManifest(env) {
   const s = await getSettings(env);
   const v = s.icon_v || 0;
-  const bg = s.theme === "light" ? "#f6f3ee" : "#0d0b09";
+  const bg = s.theme === "light" ? "#f6f3ee" : (s.dark_bg || "#0d0b09");
   return new Response(JSON.stringify({
     name: s.name, short_name: s.name, lang: "ar", dir: "rtl", start_url: "/", scope: "/", display: "standalone", orientation: "any",
     background_color: bg, theme_color: bg,

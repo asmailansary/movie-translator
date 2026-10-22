@@ -19,7 +19,13 @@ try { var s0 = JSON.parse(localStorage.getItem("mt_settings") || "null");
   var mine = JSON.parse(localStorage.getItem("mt_themePref") || "null");
   var base = (s0 && s0.user_theme_toggle !== false && mine) ? mine : (s0 ? s0.theme : "dark");
   var th = base === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : base;
-  document.documentElement.setAttribute("data-theme", th || "dark"); } catch (e) {}
+  document.documentElement.setAttribute("data-theme", th || "dark");
+  var bg = s0 && /^#[0-9a-f]{6}$/i.test(s0.dark_bg || "") ? s0.dark_bg : null, r = document.documentElement.style;
+  if ((th || "dark") === "dark" && bg) { r.setProperty("--bg", bg); r.setProperty("--surface", "color-mix(in srgb," + bg + " 90%,#fff)");
+    r.setProperty("--surface2", "color-mix(in srgb," + bg + " 84%,#fff)"); r.setProperty("--line", "color-mix(in srgb," + bg + " 76%,#fff)");
+    r.setProperty("--muted", "color-mix(in srgb," + bg + " 35%,#c9c4d8)");
+    document.querySelector('meta[name="theme-color"]').content = bg; }
+  if (s0 && /^#[0-9a-f]{6}$/i.test(s0.accent || "")) r.setProperty("--accent", s0.accent); } catch (e) {}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -69,7 +75,7 @@ h1.brand{font-size:30px}
 .brand.xl{font-size:46px;margin-top:14px}
 
 /* شاشة الافتتاح */
-.splash{position:fixed;inset:0;z-index:100;background:radial-gradient(120% 70% at 50% 42%,#1d1810 0%,var(--bg) 62%);
+.splash{position:fixed;inset:0;z-index:100;background:radial-gradient(120% 70% at 50% 42%,color-mix(in srgb,var(--bg) 82%,var(--accent)) 0%,var(--bg) 62%);
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:6vh;
   transition:opacity .55s cubic-bezier(.4,0,.2,1),transform .55s cubic-bezier(.4,0,.2,1),visibility .55s;will-change:opacity,transform}
 .splash.out{opacity:0;visibility:hidden;transform:scale(1.08)}
@@ -88,7 +94,7 @@ h1.brand{font-size:30px}
 
 /* شريط علوي يصير شفاف ومغبّش وقت التمرير */
 header#topbar{position:sticky;top:0;z-index:20;margin:0 -16px 18px;padding:max(10px,env(safe-area-inset-top)) 16px 10px;transition:background .25s,border-color .25s;border-bottom:1px solid transparent}
-header#topbar.scrolled{background:rgba(13,11,9,.94);border-bottom-color:var(--line)}
+header#topbar.scrolled{background:color-mix(in srgb,var(--bg) 94%,transparent);border-bottom-color:var(--line)}
 .watchbar{display:none;align-items:center;justify-content:space-between;margin:0 0 12px}
 body.watching .watchbar{display:flex}
 body.watching{padding-top:max(12px,env(safe-area-inset-top))}
@@ -151,7 +157,7 @@ input[type=url]{direction:ltr;text-align:left}
 .err{color:var(--danger)}
 
 /* بطاقات الإرشاد */
-.tip{position:relative;background:linear-gradient(135deg,#2a2114,#17140f);border-color:#4a3a1f}
+.tip{position:relative;background:linear-gradient(135deg,color-mix(in srgb,var(--surface) 82%,var(--accent)),var(--surface));border-color:color-mix(in srgb,var(--line) 65%,var(--accent))}
 .tip h3{margin:0 0 8px;font-size:16px}
 .tip ol{margin:0;padding:0 18px 0 0;line-height:2;font-size:14px}
 .tip .x{position:absolute;top:10px;left:10px;width:32px;height:32px;border:0;border-radius:9px;background:rgba(255,255,255,.06);color:var(--muted);font-size:18px}
@@ -211,7 +217,7 @@ input[type=url]{direction:ltr;text-align:left}
 /* الإعدادات */
 .sheet{position:absolute;inset:0;z-index:8;background:#000a;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
 .sheet.on{opacity:1;pointer-events:auto}
-.sheet .panel{width:min(560px,100%);max-height:92%;overflow:auto;background:#17140ff2;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+.sheet .panel{width:min(560px,100%);max-height:92%;overflow:auto;background:color-mix(in srgb,var(--surface) 95%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   border:1px solid var(--line);border-radius:18px 18px 0 0;padding:14px 16px max(16px,env(safe-area-inset-bottom));transform:translateY(20px);transition:transform .2s}
 .sheet.on .panel{transform:none}
 .sheet h4{margin:0 0 10px;font-size:16px;display:flex;justify-content:space-between;align-items:center}
@@ -277,7 +283,7 @@ body.cinema .not-cinema{display:none!important}
 .fav .del{flex:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);color:var(--muted);display:grid;place-items:center}
 .fav .del svg{width:18px;height:18px}
 .empty{color:var(--muted);font-size:13px;margin:0}
-.snap{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);background:linear-gradient(135deg,#2a2a10,#17140f);border-color:#4a4718}
+.snap{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);background:linear-gradient(135deg,color-mix(in srgb,var(--surface) 88%,#fffc00),var(--surface));border-color:#4a4718}
 .snap .ghost{width:42px;height:42px;border-radius:12px;background:#fffc00;display:grid;place-items:center;font-size:22px;flex:none}
 .snap span:nth-child(2){flex:1;line-height:1.6}
 .snap small{color:var(--muted)}
@@ -571,7 +577,15 @@ body.cinema .not-cinema{display:none!important}
     const base = (S.user_theme_toggle !== false && mine) ? mine : (S.theme || "dark");
     const th = base === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : base;
     document.documentElement.setAttribute("data-theme", th);
-    document.querySelector('meta[name="theme-color"]').content = th === "light" ? "#f6f3ee" : "#0d0b09";
+    const root = document.documentElement.style, bg = /^#[0-9a-f]{6}$/i.test(S.dark_bg || "") ? S.dark_bg : null;
+    if (th === "dark" && bg) {
+      root.setProperty("--bg", bg);
+      root.setProperty("--surface", `color-mix(in srgb,${bg} 90%,#fff)`);
+      root.setProperty("--surface2", `color-mix(in srgb,${bg} 84%,#fff)`);
+      root.setProperty("--line", `color-mix(in srgb,${bg} 76%,#fff)`);
+      root.setProperty("--muted", `color-mix(in srgb,${bg} 35%,#c9c4d8)`);
+    } else ["--bg", "--surface", "--surface2", "--line", "--muted"].forEach(k => root.removeProperty(k));
+    document.querySelector('meta[name="theme-color"]').content = th === "light" ? "#f6f3ee" : (bg || "#0d0b09");
     document.querySelectorAll(".themeBtn span").forEach(x => { x.textContent = th === "light" ? "🌙" : "☀️"; });
   }
   document.querySelectorAll(".themeBtn").forEach(b => b.onclick = () => {
