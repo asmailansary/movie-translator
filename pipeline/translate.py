@@ -41,6 +41,9 @@ DIALECT = os.environ.get("DIALECT", "najdi").strip()
 CALLBACK = os.environ.get("CALLBACK", "").strip().rstrip("/")
 INGEST_SECRET = os.environ.get("INGEST_SECRET", "").strip()
 
+# Groq يرفض الطلبات اللي توقيعها Python-urllib (خطأ 1010)، فنعرّف نفسنا باسم واضح
+UA = "movie-translator/1.0 (+https://github.com/asmailansary/movie-translator)"
+
 CHUNK_SECONDS = 600          # نقسم الصوت قطع كل وحدة 10 دقائق
 TRANSLATE_BATCH = 50         # عدد الجمل في كل طلب ترجمة
 TRANSLATE_WORKERS = 2        # قليل عشان ما نتعدى حدود الخطط المجانية
@@ -248,7 +251,7 @@ SECRET_NAMES = {"Groq": "GROQ_API_KEY", "Gemini": "GEMINI_API_KEY", "Claude": "A
 def http_json(url, headers, body: bytes, timeout=300, retries=4, service=""):
     last = None
     for attempt in range(retries):
-        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        req = urllib.request.Request(url, data=body, headers={"User-Agent": UA, **headers}, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return json.loads(r.read().decode("utf-8"))
@@ -386,7 +389,7 @@ def pick_gemini_model():
             return _gemini_model["name"]
         req = urllib.request.Request(
             "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
-            headers={"x-goog-api-key": GEMINI_API_KEY},
+            headers={"x-goog-api-key": GEMINI_API_KEY, "User-Agent": UA},
         )
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
