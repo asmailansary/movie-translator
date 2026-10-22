@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0b09">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>مترجم الأفلام</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=Reem+Kufi:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0b09; --surface:#17140f; --surface2:#211c15; --line:#2f2820;
+  --text:#f3ece1; --muted:#a59885; --accent:#e0a84a; --accent-ink:#1a1206;
+  --danger:#ff7a6b; --ok:#8fd19e;
+  --sub-size:20px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font-family:"IBM Plex Sans Arabic",system-ui,sans-serif;min-height:100dvh;
+  padding:max(16px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom))}
+.wrap{max-width:720px;margin:0 auto}
+header{display:flex;align-items:center;gap:10px;margin:4px 0 18px}
+.logo{width:38px;height:38px;border-radius:10px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink)}
+h1{font-family:"Reem Kufi",sans-serif;font-size:24px;margin:0;letter-spacing:0}
+header p{margin:0;color:var(--muted);font-size:13px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+label.t{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
+input,select{width:100%;font:inherit;font-size:16px;color:var(--text);background:var(--surface2);
+  border:1px solid var(--line);border-radius:12px;padding:12px 14px;outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+input[type=url]{direction:ltr;text-align:left}
+.row{display:grid;gap:12px;margin-top:12px}
+.seg{display:flex;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;font:inherit;font-size:15px;border:0;border-radius:9px;padding:9px;background:transparent;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{font:inherit;font-size:15px;border:1px solid var(--line);background:var(--surface2);color:var(--text);
+  border-radius:999px;padding:8px 14px}
+.chips button[aria-pressed=true]{border-color:var(--accent);color:var(--accent);background:rgba(224,168,74,.12);font-weight:700}
+.hidden{display:none!important}
+.go{width:100%;margin-top:16px;font:inherit;font-size:17px;font-weight:700;border:0;border-radius:14px;padding:14px;
+  background:var(--accent);color:var(--accent-ink)}
+.go:disabled{opacity:.5}
+.pw{display:flex;gap:8px;align-items:center}
+.pw input{flex:1}
+.note{font-size:13px;color:var(--muted);margin:10px 0 0;line-height:1.7}
+.err{color:var(--danger)}
+
+/* المشغل */
+.stage{position:relative;background:#000;border-radius:16px;overflow:hidden;aspect-ratio:16/9}
+.stage #player,.stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.subs{position:absolute;left:4%;right:4%;bottom:7%;text-align:center;pointer-events:none;z-index:3}
+.subs span{display:inline;font-size:var(--sub-size);line-height:1.55;font-weight:700;color:#fff;
+  background:rgba(0,0,0,.72);padding:2px 10px;border-radius:6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.subs .orig{display:block;margin-top:4px}
+.subs .orig span{font-size:calc(var(--sub-size)*.7);font-weight:500;color:#ddd;direction:ltr;unicode-bidi:isolate}
+.below{min-height:3.4em;margin-top:10px;text-align:center;font-size:18px;font-weight:700;line-height:1.6}
+
+/* وضع السينما */
+body.cinema{padding:0;overflow:hidden;background:#000}
+body.cinema .wrap>*:not(#watch){display:none}
+body.cinema #watch .card{display:none}
+body.cinema #watch .bar{position:fixed;top:max(8px,env(safe-area-inset-top));left:8px;z-index:10;background:none;border:0;padding:0;margin:0}
+body.cinema #watch .bar>*:not(#cinemaBtn){display:none}
+body.cinema .stage{position:fixed;inset:0;border-radius:0;aspect-ratio:auto;z-index:5}
+body.cinema .below{display:none}
+body.cinema{--sub-size:24px}
+
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
+.ibtn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:10px;
+  padding:8px 12px;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.ibtn svg{width:18px;height:18px}
+.spacer{flex:1}
+.prog{height:6px;background:var(--surface2);border-radius:99px;overflow:hidden;margin-top:10px}
+.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .6s}
+.status{display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.status b{font-weight:500}
+.settings{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+.stepper{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--line);
+  border-radius:12px;padding:4px}
+.stepper button{width:38px;height:38px;border:0;border-radius:9px;background:var(--surface);color:var(--text);font-size:20px}
+.stepper span{font-size:14px;text-align:center}
+.toggle{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
+.toggle input{width:20px;height:20px;accent-color:var(--accent)}
+.recent button{width:100%;text-align:right;font:inherit;background:none;border:0;border-top:1px solid var(--line);color:var(--text);
+  padding:10px 0;display:flex;justify-content:space-between;gap:10px}
+.recent button:first-of-type{border-top:0}
+.recent small{color:var(--muted)}
+.recent .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M6 15h4M13 15h5M6 11h8M16 11h2"/></svg>
+    </div>
+    <div>
+      <h1>مترجم الأفلام</h1>
+      <p>الصق رابط يوتيوب واختر لهجتك</p>
+    </div>
+  </header>
+
+  <form id="form" class="card" autocomplete="off">
+    <label class="t" for="url">رابط الفلم</label>
+    <input id="url" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…" required>
+
+    <div class="row">
+      <div>
+        <label class="t">لغة الفلم</label>
+        <div class="chips" id="langs"></div>
+      </div>
+      <div>
+        <label class="t">الترجمة إلى</label>
+        <div class="seg" id="group">
+          <button type="button" data-g="fusha" aria-pressed="false">الفصحى</button>
+          <button type="button" data-g="dialect" aria-pressed="true">لهجات</button>
+        </div>
+      </div>
+      <div id="dialectBox">
+        <label class="t">اللهجة</label>
+        <div class="chips" id="dialects"></div>
+      </div>
+      <div>
+        <label class="t" for="pw">كلمة مرور الأداة</label>
+        <div class="pw"><input id="pw" type="password" placeholder="اللي حطيتها في إعدادات الخادم" required></div>
+      </div>
+    </div>
+    <button class="go" id="goBtn" type="submit">ترجم وشغّل</button>
+    <p class="note err hidden" id="formErr"></p>
+    <p class="note hidden" id="notReady">الخادم ناقصه مفاتيح أو كلمة مرور — راجع دليل التشغيل.</p>
+  </form>
+
+  <section id="watch" class="hidden">
+    <div class="stage">
+      <div id="player"></div>
+      <div class="subs" id="subs" aria-live="polite"></div>
+    </div>
+
+    <div class="bar">
+      <button class="ibtn" id="cinemaBtn" type="button" aria-label="وضع السينما">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        <span>وضع السينما</span>
+      </button>
+      <span class="spacer"></span>
+      <a class="ibtn hidden" id="srtBtn" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
+        ملف الترجمة
+      </a>
+      <button class="ibtn" id="newBtn" type="button">فلم جديد</button>
+    </div>
+
+    <div class="card">
+      <div class="status"><b id="stage">…</b><span id="pct"></span></div>
+      <div class="prog"><i id="bar"></i></div>
+      <p class="note" id="hint">تقدر تبدأ المشاهدة أول ما يجهز أول جزء، والباقي يكمل وانت تتابع.</p>
+    </div>
+
+    <div class="card">
+      <div class="settings">
+        <div>
+          <label class="t">حجم الخط</label>
+          <div class="stepper"><button type="button" data-size="-2">−</button><span id="sizeV">20</span><button type="button" data-size="2">+</button></div>
+        </div>
+        <div>
+          <label class="t">تقديم/تأخير الترجمة</label>
+          <div class="stepper"><button type="button" data-off="-0.5">−</button><span id="offV">0.0 ث</span><button type="button" data-off="0.5">+</button></div>
+        </div>
+      </div>
+      <label class="toggle"><input type="checkbox" id="showOrig"> اعرض النص الأصلي تحت الترجمة</label>
+    </div>
+  </section>
+
+  <div class="below" id="below" aria-hidden="true"></div>
+
+  <section class="card recent hidden" id="recentBox">
+    <label class="t">آخر الأفلام</label>
+    <div id="recent"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("mt_" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("mt_" + k, JSON.stringify(v)); } catch {} }
+  };
+
+  let cfg = null, lang = store.get("lang", "auto"), dialect = store.get("dialect", "najdi");
+  let job = null, segs = [], pollTimer = null, player = null, ytReady = false, pendingVid = null;
+  let offset = 0, size = store.get("size", 20), showOrig = store.get("orig", false), lastIdx = -1, readyUntil = 0;
+
+  // ───── الإعدادات من الخادم
+  fetch("/api/config").then(r => r.json()).then(c => {
+    cfg = c;
+    if (!c.ready) $("#notReady").classList.remove("hidden");
+    renderChips();
+  }).catch(() => showErr("ما قدرت أتصل بالخادم."));
+
+  function renderChips() {
+    $("#langs").innerHTML = "";
+    for (const [k, name] of Object.entries(cfg.languages)) $("#langs").append(chip(name, k === lang, () => { lang = k; store.set("lang", k); renderChips(); }));
+    const group = cfg.dialects[dialect]?.group || "dialect";
+    document.querySelectorAll("#group button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.g === group)));
+    $("#dialectBox").classList.toggle("hidden", group !== "dialect");
+    $("#dialects").innerHTML = "";
+    for (const [k, d] of Object.entries(cfg.dialects)) if (d.group === "dialect")
+      $("#dialects").append(chip(d.name, k === dialect, () => { dialect = k; store.set("dialect", k); renderChips(); }));
+  }
+  function chip(text, on, fn) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.setAttribute("aria-pressed", String(on)); b.onclick = fn; return b; }
+  $("#group").addEventListener("click", e => {
+    const g = e.target.closest("button")?.dataset.g; if (!g) return;
+    dialect = g === "fusha" ? "fusha" : (store.get("lastDialect", "najdi"));
+    store.set("dialect", dialect); renderChips();
+  });
+  const _origSet = store.set; store.set = (k, v) => { _origSet(k, v); if (k === "dialect" && v !== "fusha") _origSet("lastDialect", v); };
+
+  $("#pw").value = store.get("pw", "");
+  function showErr(m) { const e = $("#formErr"); e.textContent = m; e.classList.toggle("hidden", !m); }
+
+  // ───── بدء الترجمة
+  $("#form").addEventListener("submit", async e => {
+    e.preventDefault(); showErr("");
+    const btn = $("#goBtn"); btn.disabled = true; btn.textContent = "لحظة…";
+    try {
+      const pw = $("#pw").value.trim();
+      const r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json", "X-App-Password": pw },
+        body: JSON.stringify({ url: $("#url").value, source: lang, dialect }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "صار خطأ");
+      store.set("pw", pw);
+      openJob(d.job_id, d.video_id);
+    } catch (err) { showErr(err.message); }
+    finally { btn.disabled = false; btn.textContent = "ترجم وشغّل"; }
+  });
+
+  function openJob(id, vid) {
+    job = { id, vid }; segs = []; lastIdx = -1; readyUntil = 0;
+    $("#form").classList.add("hidden"); $("#recentBox").classList.add("hidden"); $("#watch").classList.remove("hidden");
+    $("#srtBtn").classList.add("hidden"); $("#subs").innerHTML = ""; $("#below").textContent = "";
+    loadVideo(vid); poll();
+  }
+
+  async function poll() {
+    clearTimeout(pollTimer);
+    if (!job) return;
+    try {
+      const r = await fetch(`/api/jobs/${job.id}?since=${segs.length}`, { headers: { "X-App-Password": store.get("pw", "") } });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      if (d.since === segs.length) segs.push(...d.segments);
+      readyUntil = d.ready_until || 0;
+      $("#stage").textContent = d.status === "error" ? d.error : d.stage;
+      $("#stage").classList.toggle("err", d.status === "error");
+      $("#pct").textContent = d.status === "error" ? "" : Math.round(d.progress * 100) + "%";
+      $("#bar").style.width = (d.progress * 100) + "%";
+      if (d.status === "done") {
+        $("#hint").textContent = "الترجمة كاملة. استمتع بالفلم 🎬";
+        $("#srtBtn").classList.remove("hidden");
+        saveRecent(d.title);
+        return;
+      }
+      if (d.status === "error") { $("#hint").textContent = ""; return; }
+      if (d.title) saveRecent(d.title, true);
+    } catch (err) { $("#stage").textContent = err.message || "انقطع الاتصال… أحاول مرة ثانية"; }
+    pollTimer = setTimeout(poll, segs.length ? 4000 : 2500);
+  }
+
+  $("#srtBtn").addEventListener("click", async e => {
+    e.preventDefault();
+    const r = await fetch(`/api/jobs/${job.id}/srt`, { headers: { "X-App-Password": store.get("pw", "") } });
+    const blob = await r.blob(); const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = job.vid + ".ar.srt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+
+  $("#newBtn").addEventListener("click", () => {
+    clearTimeout(pollTimer); job = null; try { player?.stopVideo(); } catch {}
+    document.body.classList.remove("cinema");
+    $("#watch").classList.add("hidden"); $("#form").classList.remove("hidden"); $("#url").value = ""; renderRecent();
+    $("#subs").innerHTML = ""; $("#below").textContent = "";
+  });
+
+  // ───── مشغّل يوتيوب
+  window.onYouTubeIframeAPIReady = () => { ytReady = true; if (pendingVid) loadVideo(pendingVid); };
+  const s = document.createElement("script"); s.src = "https://www.youtube.com/iframe_api"; document.head.append(s);
+
+  function loadVideo(vid) {
+    if (!ytReady) { pendingVid = vid; return; }
+    pendingVid = null;
+    if (player) { player.loadVideoById(vid); player.pauseVideo(); return; }
+    player = new YT.Player("player", {
+      videoId: vid,
+      playerVars: { playsinline: 1, fs: 0, rel: 0, modestbranding: 1, cc_load_policy: 0, iv_load_policy: 3 }
+    });
+  }
+
+  // ───── مزامنة الترجمة
+  function findSeg(t) {
+    let lo = 0, hi = segs.length - 1;
+    while (lo <= hi) {
+      const m = (lo + hi) >> 1;
+      if (segs[m].end < t) lo = m + 1; else if (segs[m].start > t) hi = m - 1; else return m;
+    }
+    return -1;
+  }
+  function tick() {
+    if (player && player.getCurrentTime && job) {
+      const t = player.getCurrentTime() - offset;
+      const i = findSeg(t);
+      if (i !== lastIdx) { lastIdx = i; render(i >= 0 ? segs[i] : null, t); }
+      else if (i < 0 && segs.length && t > readyUntil && readyUntil < 1e8) render(null, t);
+    }
+    requestAnimationFrame(tick);
+  }
+  function render(seg, t) {
+    const box = $("#subs"); box.innerHTML = "";
+    if (!seg) {
+      const waiting = job && t > readyUntil && readyUntil < 1e8 && player.getPlayerState?.() === 1;
+      $("#below").textContent = waiting ? "الترجمة لهذا الجزء لسا تتجهز…" : "";
+      if (waiting) { const sp = document.createElement("span"); sp.textContent = "⏳ الترجمة تتجهز…"; box.append(sp); }
+      return;
+    }
+    if (seg.ar) { const sp = document.createElement("span"); sp.textContent = seg.ar; box.append(sp); }
+    if (showOrig) { const o = document.createElement("div"); o.className = "orig"; const sp = document.createElement("span"); sp.textContent = seg.src; o.append(sp); box.append(o); }
+    $("#below").textContent = "";
+  }
+  requestAnimationFrame(tick);
+
+  // ───── الإعدادات
+  function applySize() { document.documentElement.style.setProperty("--sub-size", size + "px"); $("#sizeV").textContent = size; }
+  applySize();
+  document.querySelectorAll("[data-size]").forEach(b => b.onclick = () => { size = Math.min(40, Math.max(12, size + +b.dataset.size)); store.set("size", size); applySize(); lastIdx = -2; });
+  document.querySelectorAll("[data-off]").forEach(b => b.onclick = () => { offset = Math.round((offset + +b.dataset.off) * 10) / 10; $("#offV").textContent = offset.toFixed(1) + " ث"; lastIdx = -2; });
+  $("#showOrig").checked = showOrig;
+  $("#showOrig").onchange = e => { showOrig = e.target.checked; store.set("orig", showOrig); lastIdx = -2; };
+
+  $("#cinemaBtn").onclick = () => {
+    const on = document.body.classList.toggle("cinema");
+    $("#cinemaBtn span").textContent = on ? "خروج" : "وضع السينما";
+    document.documentElement.style.setProperty("--sub-size", (on ? size + 4 : size) + "px");
+  };
+
+  // ───── آخر الأفلام
+  function saveRecent(title, partial) {
+    const list = store.get("recent", []).filter(x => !(x.vid === job.vid && x.dialect === dialect && x.lang === lang));
+    list.unshift({ vid: job.vid, title: title || job.vid, dialect, lang, url: $("#url").value || "https://youtu.be/" + job.vid, partial: !!partial });
+    store.set("recent", list.slice(0, 8));
+  }
+  function renderRecent() {
+    const list = store.get("recent", []); const box = $("#recent"); box.innerHTML = "";
+    $("#recentBox").classList.toggle("hidden", !list.length);
+    for (const x of list) {
+      const b = document.createElement("button"); b.type = "button";
+      const tt = document.createElement("span"); tt.className = "tt"; tt.textContent = x.title;
+      const sm = document.createElement("small"); sm.textContent = cfg?.dialects[x.dialect]?.name || "";
+      b.append(tt, sm);
+      b.onclick = () => { $("#url").value = x.url; lang = x.lang; dialect = x.dialect; store.set("lang", lang); store.set("dialect", dialect); if (cfg) renderChips(); $("#form").requestSubmit(); };
+      box.append(b);
+    }
+  }
+  renderRecent();
+})();
+</script>
+</body>
+</html>

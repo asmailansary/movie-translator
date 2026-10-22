@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: movie-translator
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: YT_COOKIES
+        sync: false
