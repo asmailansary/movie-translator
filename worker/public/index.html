@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d0b09">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>مترجم الأفلام</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,7 +14,7 @@
 :root{
   --bg:#0d0b09; --surface:#17140f; --surface2:#211c15; --line:#2f2820;
   --text:#f3ece1; --muted:#a59885; --accent:#e0a84a; --accent-ink:#1a1206;
-  --danger:#ff7a6b; --ok:#8fd19e;
+  --danger:#ff7a6b; --heart:#ff5a6e;
   --sub-size:20px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -30,7 +31,7 @@ header p{margin:0;color:var(--muted);font-size:13px}
 label.t{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
 input,select{width:100%;font:inherit;font-size:16px;color:var(--text);background:var(--surface2);
   border:1px solid var(--line);border-radius:12px;padding:12px 14px;outline:none}
-input:focus,select:focus{border-color:var(--accent)}
+input:focus{border-color:var(--accent)}
 input[type=url]{direction:ltr;text-align:left}
 .row{display:grid;gap:12px;margin-top:12px}
 .seg{display:flex;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
@@ -44,12 +45,10 @@ input[type=url]{direction:ltr;text-align:left}
 .go{width:100%;margin-top:16px;font:inherit;font-size:17px;font-weight:700;border:0;border-radius:14px;padding:14px;
   background:var(--accent);color:var(--accent-ink)}
 .go:disabled{opacity:.5}
-.pw{display:flex;gap:8px;align-items:center}
-.pw input{flex:1}
 .note{font-size:13px;color:var(--muted);margin:10px 0 0;line-height:1.7}
 .err{color:var(--danger)}
 
-/* المشغل */
+/* المشغّل */
 .stage{position:relative;background:#000;border-radius:16px;overflow:hidden;aspect-ratio:16/9}
 .stage #player,.stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .subs{position:absolute;left:4%;right:4%;bottom:7%;text-align:center;pointer-events:none;z-index:3}
@@ -57,22 +56,33 @@ input[type=url]{direction:ltr;text-align:left}
   background:rgba(0,0,0,.72);padding:2px 10px;border-radius:6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .subs .orig{display:block;margin-top:4px}
 .subs .orig span{font-size:calc(var(--sub-size)*.7);font-weight:500;color:#ddd;direction:ltr;unicode-bidi:isolate}
-.below{min-height:3.4em;margin-top:10px;text-align:center;font-size:18px;font-weight:700;line-height:1.6}
+.exit{display:none}
 
-/* وضع السينما */
-body.cinema{padding:0;overflow:hidden;background:#000}
+/* وضع السينما (مثل نتفلكس) */
+body.cinema{padding:0;overflow:hidden;background:#000;overscroll-behavior:none}
 body.cinema .wrap>*:not(#watch){display:none}
-body.cinema #watch .card{display:none}
-body.cinema #watch .bar{position:fixed;top:max(8px,env(safe-area-inset-top));left:8px;z-index:10;background:none;border:0;padding:0;margin:0}
-body.cinema #watch .bar>*:not(#cinemaBtn){display:none}
-body.cinema .stage{position:fixed;inset:0;border-radius:0;aspect-ratio:auto;z-index:5}
-body.cinema .below{display:none}
-body.cinema{--sub-size:24px}
+body.cinema #watch>*:not(.stage){display:none}
+body.cinema .stage{position:fixed;inset:0;width:100vw;height:100dvh;border-radius:0;aspect-ratio:auto;z-index:50}
+/* الجوال واقف (قفل التدوير شغّال): ندوّر الفلم بنفسنا عشان يصير بالعرض */
+@media (orientation:portrait){
+  body.cinema .stage{inset:auto;top:50%;left:50%;width:100dvh;height:100vw;transform:translate(-50%,-50%) rotate(90deg)}
+}
+body.cinema .subs{bottom:9%;left:8%;right:8%}
+body.cinema .subs span{background:none;padding:0;font-size:calc(var(--sub-size) + 6px);line-height:1.45;
+  text-shadow:0 0 3px #000,0 0 3px #000,0 2px 4px #000,0 0 10px rgba(0,0,0,.8)}
+body.cinema .subs .orig span{font-size:calc((var(--sub-size) + 6px)*.62)}
+body.cinema .exit{display:flex;position:absolute;top:max(12px,env(safe-area-inset-top));right:14px;z-index:6;
+  align-items:center;gap:6px;font:inherit;font-size:14px;color:#fff;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);
+  border-radius:999px;padding:7px 14px;transition:opacity .4s}
+body.cinema .exit.dim{opacity:.25}
+.exit svg{width:16px;height:16px}
 
 .bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
 .ibtn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:10px;
   padding:8px 12px;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
 .ibtn svg{width:18px;height:18px}
+.heart[aria-pressed=true]{color:var(--heart);border-color:var(--heart);background:rgba(255,90,110,.1)}
+.heart[aria-pressed=true] svg{fill:currentColor}
 .spacer{flex:1}
 .prog{height:6px;background:var(--surface2);border-radius:99px;overflow:hidden;margin-top:10px}
 .prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .6s}
@@ -85,11 +95,21 @@ body.cinema{--sub-size:24px}
 .stepper span{font-size:14px;text-align:center}
 .toggle{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px}
 .toggle input{width:20px;height:20px;accent-color:var(--accent)}
-.recent button{width:100%;text-align:right;font:inherit;background:none;border:0;border-top:1px solid var(--line);color:var(--text);
-  padding:10px 0;display:flex;justify-content:space-between;gap:10px}
-.recent button:first-of-type{border-top:0}
-.recent small{color:var(--muted)}
-.recent .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* المحفوظة */
+.favs h2{font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:6px}
+.favs h2 svg{width:18px;height:18px;color:var(--heart);fill:currentColor}
+.fav{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding:10px 0}
+.fav:first-of-type{border-top:0}
+.fav .open{flex:1;min-width:0;text-align:right;font:inherit;background:none;border:0;color:var(--text);padding:0}
+.fav .tt{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.fav small{color:var(--muted);font-size:12px}
+.fav .mini{height:3px;background:var(--surface2);border-radius:9px;margin-top:6px;overflow:hidden}
+.fav .mini i{display:block;height:100%;background:var(--heart)}
+.fav .del{flex:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);color:var(--muted);
+  display:grid;place-items:center}
+.fav .del svg{width:18px;height:18px}
+.empty{color:var(--muted);font-size:13px;margin:0}
 </style>
 </head>
 <body>
@@ -107,7 +127,6 @@ body.cinema{--sub-size:24px}
   <form id="form" class="card" autocomplete="off">
     <label class="t" for="url">رابط الفلم</label>
     <input id="url" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…" required>
-
     <div class="row">
       <div>
         <label class="t">لغة الفلم</label>
@@ -126,35 +145,48 @@ body.cinema{--sub-size:24px}
       </div>
       <div>
         <label class="t" for="pw">كلمة مرور الأداة</label>
-        <div class="pw"><input id="pw" type="password" placeholder="اللي حطيتها في إعدادات الخادم" required></div>
+        <input id="pw" type="password" placeholder="اللي حطيتها في إعدادات Cloudflare" required>
       </div>
     </div>
     <button class="go" id="goBtn" type="submit">ترجم وشغّل</button>
     <p class="note err hidden" id="formErr"></p>
-    <p class="note hidden" id="notReady">الخادم ناقصه مفاتيح أو كلمة مرور — راجع دليل التشغيل.</p>
+    <p class="note hidden" id="notReady">الأداة ناقصها إعدادات — راجع دليل التشغيل.</p>
   </form>
 
+  <section class="card favs" id="favBox">
+    <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 4.3 2.4h2c.7-1.3 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg> المحفوظة</h2>
+    <div id="favList"><p class="empty">اكتب كلمة المرور فوق عشان تظهر أفلامك المحفوظة.</p></div>
+  </section>
+
   <section id="watch" class="hidden">
-    <div class="stage">
+    <div class="stage" id="stage">
       <div id="player"></div>
       <div class="subs" id="subs" aria-live="polite"></div>
+      <button class="exit" id="exitBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+        خروج
+      </button>
     </div>
 
     <div class="bar">
-      <button class="ibtn" id="cinemaBtn" type="button" aria-label="وضع السينما">
+      <button class="ibtn" id="cinemaBtn" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
-        <span>وضع السينما</span>
+        وضع السينما
+      </button>
+      <button class="ibtn heart" id="heartBtn" type="button" aria-pressed="false" aria-label="حفظ الفلم">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 4.3 2.4h2c.7-1.3 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg>
+        <span>حفظ</span>
       </button>
       <span class="spacer"></span>
-      <a class="ibtn hidden" id="srtBtn" href="#">
+      <a class="ibtn hidden" id="srtBtn" href="#" aria-label="ملف الترجمة">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
-        ملف الترجمة
+        SRT
       </a>
       <button class="ibtn" id="newBtn" type="button">فلم جديد</button>
     </div>
 
     <div class="card">
-      <div class="status"><b id="stage">…</b><span id="pct"></span></div>
+      <div class="status"><b id="stage-text">…</b><span id="pct"></span></div>
       <div class="prog"><i id="bar"></i></div>
       <p class="note" id="hint">GitHub يحتاج قرابة دقيقة يبدأ، وبعدها تقدر تشاهد أول ما يجهز أول جزء والباقي يكمل وانت تتابع.</p>
     </div>
@@ -167,18 +199,11 @@ body.cinema{--sub-size:24px}
         </div>
         <div>
           <label class="t">تقديم/تأخير الترجمة</label>
-          <div class="stepper"><button type="button" data-off="-0.5">−</button><span id="offV">0.0 ث</span><button type="button" data-off="0.5">+</button></div>
+          <div class="stepper"><button type="button" data-off="-0.25">−</button><span id="offV">0.0 ث</span><button type="button" data-off="0.25">+</button></div>
         </div>
       </div>
       <label class="toggle"><input type="checkbox" id="showOrig"> اعرض النص الأصلي تحت الترجمة</label>
     </div>
-  </section>
-
-  <div class="below" id="below" aria-hidden="true"></div>
-
-  <section class="card recent hidden" id="recentBox">
-    <label class="t">آخر الأفلام</label>
-    <div id="recent"></div>
   </section>
 </div>
 
@@ -189,18 +214,25 @@ body.cinema{--sub-size:24px}
     get(k, d) { try { const v = localStorage.getItem("mt_" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem("mt_" + k, JSON.stringify(v)); } catch {} }
   };
+  const pw = () => store.get("pw", "");
+  const api = (path, opts = {}) => fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-App-Password": pw(), ...(opts.headers || {}) } });
+  const fmt = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
 
   let cfg = null, lang = store.get("lang", "auto"), dialect = store.get("dialect", "najdi");
-  let job = null, segs = [], pollTimer = null, player = null, ytReady = false, pendingVid = null;
+  let job = null, segs = [], pollTimer = null, player = null, ytReady = false, pending = null;
   let offset = 0, size = store.get("size", 20), showOrig = store.get("orig", false), lastIdx = -1, readyUntil = 0;
+  let favs = [], isFav = false, title = "", duration = 0, saveTimer = null;
 
-  // ───── الإعدادات من الخادم
+  // ───── الإعدادات
   fetch("/api/config").then(r => r.json()).then(c => {
     cfg = c;
     if (!c.ready) $("#notReady").classList.remove("hidden");
-    renderChips();
+    renderChips(); loadFavs();
   }).catch(() => showErr("ما قدرت أتصل بالخادم."));
 
+  function chip(text, on, fn) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.setAttribute("aria-pressed", String(on)); b.onclick = fn; return b; }
+  function setDialect(d) { dialect = d; store.set("dialect", d); if (d !== "fusha") store.set("lastDialect", d); renderChips(); }
   function renderChips() {
     $("#langs").innerHTML = "";
     for (const [k, name] of Object.entries(cfg.languages)) $("#langs").append(chip(name, k === lang, () => { lang = k; store.set("lang", k); renderChips(); }));
@@ -208,95 +240,103 @@ body.cinema{--sub-size:24px}
     document.querySelectorAll("#group button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.g === group)));
     $("#dialectBox").classList.toggle("hidden", group !== "dialect");
     $("#dialects").innerHTML = "";
-    for (const [k, d] of Object.entries(cfg.dialects)) if (d.group === "dialect")
-      $("#dialects").append(chip(d.name, k === dialect, () => { dialect = k; store.set("dialect", k); renderChips(); }));
+    for (const [k, d] of Object.entries(cfg.dialects)) if (d.group === "dialect") $("#dialects").append(chip(d.name, k === dialect, () => setDialect(k)));
   }
-  function chip(text, on, fn) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.setAttribute("aria-pressed", String(on)); b.onclick = fn; return b; }
   $("#group").addEventListener("click", e => {
     const g = e.target.closest("button")?.dataset.g; if (!g) return;
-    dialect = g === "fusha" ? "fusha" : (store.get("lastDialect", "najdi"));
-    store.set("dialect", dialect); renderChips();
+    setDialect(g === "fusha" ? "fusha" : store.get("lastDialect", "najdi"));
   });
-  const _origSet = store.set; store.set = (k, v) => { _origSet(k, v); if (k === "dialect" && v !== "fusha") _origSet("lastDialect", v); };
 
-  $("#pw").value = store.get("pw", "");
+  $("#pw").value = pw();
+  $("#pw").addEventListener("change", () => { store.set("pw", $("#pw").value.trim()); loadFavs(); });
   function showErr(m) { const e = $("#formErr"); e.textContent = m; e.classList.toggle("hidden", !m); }
 
   // ───── بدء الترجمة
-  $("#form").addEventListener("submit", async e => {
-    e.preventDefault(); showErr("");
+  async function start(url, src, dia, resumeAt) {
+    showErr("");
     const btn = $("#goBtn"); btn.disabled = true; btn.textContent = "لحظة…";
     try {
-      const pw = $("#pw").value.trim();
-      const r = await fetch("/api/jobs", { method: "POST", headers: { "Content-Type": "application/json", "X-App-Password": pw },
-        body: JSON.stringify({ url: $("#url").value, source: lang, dialect }) });
+      const r = await api("/api/jobs", { method: "POST", body: JSON.stringify({ url, source: src, dialect: dia }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "صار خطأ");
-      store.set("pw", pw);
-      openJob(d.job_id, d.video_id);
-    } catch (err) { showErr(err.message); }
+      lang = src; dialect = dia;
+      openJob(d.job_id, d.video_id, resumeAt || 0);
+    } catch (err) { showErr(err.message); window.scrollTo({ top: 0, behavior: "smooth" }); }
     finally { btn.disabled = false; btn.textContent = "ترجم وشغّل"; }
+  }
+  $("#form").addEventListener("submit", e => {
+    e.preventDefault();
+    store.set("pw", $("#pw").value.trim());
+    start($("#url").value, lang, dialect, 0);
   });
 
-  function openJob(id, vid) {
-    job = { id, vid }; segs = []; lastIdx = -1; readyUntil = 0;
-    $("#form").classList.add("hidden"); $("#recentBox").classList.add("hidden"); $("#watch").classList.remove("hidden");
-    $("#srtBtn").classList.add("hidden"); $("#subs").innerHTML = ""; $("#below").textContent = "";
-    loadVideo(vid); poll();
+  function openJob(id, vid, resumeAt) {
+    job = { id, vid }; segs = []; lastIdx = -1; readyUntil = 0; title = ""; duration = 0;
+    $("#form").classList.add("hidden"); $("#favBox").classList.add("hidden"); $("#watch").classList.remove("hidden");
+    $("#srtBtn").classList.add("hidden"); $("#subs").innerHTML = "";
+    setHeart(favs.some(f => f.key === favKey()));
+    loadVideo(vid, resumeAt); poll();
+    window.scrollTo({ top: 0 });
   }
 
   async function poll() {
     clearTimeout(pollTimer);
     if (!job) return;
+    const myJob = job;
     try {
-      const r = await fetch(`/api/jobs/${job.id}?since=${segs.length}`, { headers: { "X-App-Password": store.get("pw", "") } });
+      const r = await api(`/api/jobs/${job.id}?since=${segs.length}`);
       const d = await r.json();
+      if (myJob !== job) return;
       if (!r.ok) throw new Error(d.error);
       if (d.since === segs.length) segs.push(...d.segments);
       readyUntil = d.ready_until || 0;
-      $("#stage").textContent = d.status === "error" ? d.error : d.stage;
-      $("#stage").classList.toggle("err", d.status === "error");
+      if (d.title) title = d.title;
+      if (d.duration) duration = d.duration;
+      $("#stage-text").textContent = d.status === "error" ? d.error : d.stage;
+      $("#stage-text").classList.toggle("err", d.status === "error");
       $("#pct").textContent = d.status === "error" ? "" : Math.round(d.progress * 100) + "%";
       $("#bar").style.width = (d.progress * 100) + "%";
       if (d.status === "done") {
         $("#hint").textContent = "الترجمة كاملة. استمتع بالفلم 🎬";
         $("#srtBtn").classList.remove("hidden");
-        saveRecent(d.title);
         return;
       }
       if (d.status === "error") { $("#hint").textContent = ""; return; }
-      if (d.title) saveRecent(d.title, true);
-    } catch (err) { $("#stage").textContent = err.message || "انقطع الاتصال… أحاول مرة ثانية"; }
+    } catch (err) { $("#stage-text").textContent = err.message || "انقطع الاتصال… أحاول مرة ثانية"; }
     pollTimer = setTimeout(poll, segs.length ? 4000 : 2500);
   }
 
   $("#srtBtn").addEventListener("click", async e => {
     e.preventDefault();
-    const r = await fetch(`/api/jobs/${job.id}/srt`, { headers: { "X-App-Password": store.get("pw", "") } });
+    const r = await api(`/api/jobs/${job.id}/srt`);
     const blob = await r.blob(); const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = job.vid + ".ar.srt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   });
 
-  $("#newBtn").addEventListener("click", () => {
+  $("#newBtn").addEventListener("click", async () => {
+    await savePosition();
     clearTimeout(pollTimer); job = null; try { player?.stopVideo(); } catch {}
-    document.body.classList.remove("cinema");
-    $("#watch").classList.add("hidden"); $("#form").classList.remove("hidden"); $("#url").value = ""; renderRecent();
-    $("#subs").innerHTML = ""; $("#below").textContent = "";
+    setCinema(false);
+    $("#watch").classList.add("hidden"); $("#form").classList.remove("hidden"); $("#favBox").classList.remove("hidden");
+    $("#url").value = ""; $("#subs").innerHTML = ""; loadFavs();
   });
 
   // ───── مشغّل يوتيوب
-  window.onYouTubeIframeAPIReady = () => { ytReady = true; if (pendingVid) loadVideo(pendingVid); };
+  window.onYouTubeIframeAPIReady = () => { ytReady = true; if (pending) loadVideo(...pending); };
   const s = document.createElement("script"); s.src = "https://www.youtube.com/iframe_api"; document.head.append(s);
 
-  function loadVideo(vid) {
-    if (!ytReady) { pendingVid = vid; return; }
-    pendingVid = null;
-    if (player) { player.loadVideoById(vid); player.pauseVideo(); return; }
+  function loadVideo(vid, at) {
+    if (!ytReady) { pending = [vid, at]; return; }
+    pending = null;
+    const startSeconds = Math.max(0, Math.floor(at || 0));
+    if (player && player.cueVideoById) { player.cueVideoById({ videoId: vid, startSeconds }); return; }
     player = new YT.Player("player", {
       videoId: vid,
-      playerVars: { playsinline: 1, fs: 0, rel: 0, modestbranding: 1, cc_load_policy: 0, iv_load_policy: 3 }
+      playerVars: { playsinline: 1, fs: 0, rel: 0, modestbranding: 1, cc_load_policy: 0, iv_load_policy: 3, start: startSeconds }
     });
   }
+  const now = () => { try { return player?.getCurrentTime?.() || 0; } catch { return 0; } };
+  const playing = () => { try { return player?.getPlayerState?.() === 1; } catch { return false; } };
 
   // ───── مزامنة الترجمة
   function findSeg(t) {
@@ -308,25 +348,23 @@ body.cinema{--sub-size:24px}
     return -1;
   }
   function tick() {
-    if (player && player.getCurrentTime && job) {
-      const t = player.getCurrentTime() - offset;
+    if (job && player) {
+      const t = now() - offset;
       const i = findSeg(t);
-      if (i !== lastIdx) { lastIdx = i; render(i >= 0 ? segs[i] : null, t); }
-      else if (i < 0 && segs.length && t > readyUntil && readyUntil < 1e8) render(null, t);
+      const waiting = i < 0 && t > readyUntil && readyUntil < 1e8 && playing();
+      const key = waiting ? -3 : i;
+      if (key !== lastIdx) { lastIdx = key; render(i >= 0 ? segs[i] : null, waiting); }
     }
     requestAnimationFrame(tick);
   }
-  function render(seg, t) {
+  function render(seg, waiting) {
     const box = $("#subs"); box.innerHTML = "";
     if (!seg) {
-      const waiting = job && t > readyUntil && readyUntil < 1e8 && player.getPlayerState?.() === 1;
-      $("#below").textContent = waiting ? "الترجمة لهذا الجزء لسا تتجهز…" : "";
-      if (waiting) { const sp = document.createElement("span"); sp.textContent = "⏳ الترجمة تتجهز…"; box.append(sp); }
+      if (waiting) { const sp = document.createElement("span"); sp.textContent = "⏳ الترجمة لهذا الجزء تتجهز…"; box.append(sp); }
       return;
     }
     if (seg.ar) { const sp = document.createElement("span"); sp.textContent = seg.ar; box.append(sp); }
     if (showOrig) { const o = document.createElement("div"); o.className = "orig"; const sp = document.createElement("span"); sp.textContent = seg.src; o.append(sp); box.append(o); }
-    $("#below").textContent = "";
   }
   requestAnimationFrame(tick);
 
@@ -334,35 +372,86 @@ body.cinema{--sub-size:24px}
   function applySize() { document.documentElement.style.setProperty("--sub-size", size + "px"); $("#sizeV").textContent = size; }
   applySize();
   document.querySelectorAll("[data-size]").forEach(b => b.onclick = () => { size = Math.min(40, Math.max(12, size + +b.dataset.size)); store.set("size", size); applySize(); lastIdx = -2; });
-  document.querySelectorAll("[data-off]").forEach(b => b.onclick = () => { offset = Math.round((offset + +b.dataset.off) * 10) / 10; $("#offV").textContent = offset.toFixed(1) + " ث"; lastIdx = -2; });
+  document.querySelectorAll("[data-off]").forEach(b => b.onclick = () => { offset = Math.round((offset + +b.dataset.off) * 100) / 100; $("#offV").textContent = offset.toFixed(2).replace(/0$/, "") + " ث"; lastIdx = -2; });
   $("#showOrig").checked = showOrig;
   $("#showOrig").onchange = e => { showOrig = e.target.checked; store.set("orig", showOrig); lastIdx = -2; };
 
-  $("#cinemaBtn").onclick = () => {
-    const on = document.body.classList.toggle("cinema");
-    $("#cinemaBtn span").textContent = on ? "خروج" : "وضع السينما";
-    document.documentElement.style.setProperty("--sub-size", (on ? size + 4 : size) + "px");
-  };
-
-  // ───── آخر الأفلام
-  function saveRecent(title, partial) {
-    const list = store.get("recent", []).filter(x => !(x.vid === job.vid && x.dialect === dialect && x.lang === lang));
-    list.unshift({ vid: job.vid, title: title || job.vid, dialect, lang, url: $("#url").value || "https://youtu.be/" + job.vid, partial: !!partial });
-    store.set("recent", list.slice(0, 8));
+  // ───── وضع السينما
+  let dimTimer = null;
+  function wake() { $("#exitBtn").classList.remove("dim"); clearTimeout(dimTimer); dimTimer = setTimeout(() => $("#exitBtn").classList.add("dim"), 3000); }
+  function setCinema(on) {
+    document.body.classList.toggle("cinema", on);
+    if (on) { wake(); window.scrollTo(0, 0); try { screen.orientation?.lock?.("landscape").catch(() => {}); } catch {} }
+    else { try { screen.orientation?.unlock?.(); } catch {} }
+    lastIdx = -2;
   }
-  function renderRecent() {
-    const list = store.get("recent", []); const box = $("#recent"); box.innerHTML = "";
-    $("#recentBox").classList.toggle("hidden", !list.length);
-    for (const x of list) {
-      const b = document.createElement("button"); b.type = "button";
-      const tt = document.createElement("span"); tt.className = "tt"; tt.textContent = x.title;
-      const sm = document.createElement("small"); sm.textContent = cfg?.dialects[x.dialect]?.name || "";
-      b.append(tt, sm);
-      b.onclick = () => { $("#url").value = x.url; lang = x.lang; dialect = x.dialect; store.set("lang", lang); store.set("dialect", dialect); if (cfg) renderChips(); $("#form").requestSubmit(); };
-      box.append(b);
+  $("#cinemaBtn").onclick = () => setCinema(true);
+  $("#exitBtn").onclick = () => setCinema(false);
+  $("#stage").addEventListener("touchstart", () => document.body.classList.contains("cinema") && wake(), { passive: true });
+
+  // ───── المحفوظة (القلب)
+  const favKey = () => job ? `${job.vid}__${lang}__${dialect}` : "";
+  function setHeart(on) {
+    isFav = on;
+    $("#heartBtn").setAttribute("aria-pressed", String(on));
+    $("#heartBtn span").textContent = on ? "محفوظ" : "حفظ";
+  }
+  async function loadFavs() {
+    if (!pw()) return;
+    try {
+      const r = await api("/api/favorites"); const d = await r.json();
+      if (!r.ok) { $("#favList").innerHTML = `<p class="empty">${r.status === 401 ? "كلمة المرور غير صحيحة." : "ما قدرت أجيب المحفوظة."}</p>`; return; }
+      favs = d.favorites || []; renderFavs();
+    } catch {}
+  }
+  function renderFavs() {
+    const box = $("#favList"); box.innerHTML = "";
+    if (!favs.length) { box.innerHTML = '<p class="empty">ما فيه أفلام محفوظة. اضغط ❤️ وانت تتفرج عشان تحفظ الفلم ومكانك فيه.</p>'; return; }
+    for (const f of favs) {
+      const row = document.createElement("div"); row.className = "fav";
+      const open = document.createElement("button"); open.type = "button"; open.className = "open";
+      const tt = document.createElement("span"); tt.className = "tt"; tt.textContent = f.title || f.video_id;
+      const sm = document.createElement("small");
+      sm.textContent = `${cfg?.dialects[f.dialect]?.name || ""} · ${f.position > 5 ? "وقفت عند " + fmt(f.position) : "من البداية"}`;
+      const mini = document.createElement("div"); mini.className = "mini";
+      const bar = document.createElement("i"); bar.style.width = (f.duration ? Math.min(100, f.position / f.duration * 100) : 0) + "%"; mini.append(bar);
+      open.append(tt, sm, mini);
+      open.onclick = () => { if (!pw()) return showErr("اكتب كلمة المرور أول."); start("https://youtu.be/" + f.video_id, f.source, f.dialect, f.position); };
+      const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.setAttribute("aria-label", "حذف");
+      del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
+      del.onclick = async () => {
+        if (!confirm(`تحذف «${f.title || f.video_id}» من المحفوظة؟`)) return;
+        const r = await api(`/api/favorites/${f.key}`, { method: "DELETE" });
+        if (r.ok) { favs = favs.filter(x => x.key !== f.key); renderFavs(); }
+      };
+      row.append(open, del); box.append(row);
     }
   }
-  renderRecent();
+  $("#heartBtn").onclick = async () => {
+    if (!job) return;
+    const key = favKey();
+    if (isFav) {
+      const r = await api(`/api/favorites/${key}`, { method: "DELETE" });
+      if (r.ok) { favs = favs.filter(x => x.key !== key); setHeart(false); }
+    } else {
+      const r = await api("/api/favorites", { method: "POST",
+        body: JSON.stringify({ video_id: job.vid, source: lang, dialect, title, position: now(), duration: duration || player?.getDuration?.() || 0 }) });
+      const d = await r.json();
+      if (r.ok && d.favorite) { favs = [d.favorite, ...favs.filter(x => x.key !== key)]; setHeart(true); }
+    }
+  };
+  async function savePosition() {
+    if (!job || !isFav) return;
+    const t = now(); if (!t) return;
+    try {
+      await api("/api/favorites", { method: "POST", keepalive: true,
+        body: JSON.stringify({ video_id: job.vid, source: lang, dialect, title, position: t, duration: duration || player?.getDuration?.() || 0, position_only: true }) });
+      const f = favs.find(x => x.key === favKey()); if (f) f.position = t;
+    } catch {}
+  }
+  saveTimer = setInterval(() => { if (playing()) savePosition(); }, 15000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") savePosition(); });
+  window.addEventListener("pagehide", savePosition);
 })();
 </script>
 </body>

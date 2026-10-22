@@ -74,7 +74,9 @@ export function extractVideoId(raw) {
 }
 
 const jobKey = (id) => `jobs/${id}.json`;
-const subsKey = (vid, src, d) => `subs/${vid}__${src}__${d}.json`;
+// v2: توقيت الكلمات (الترجمات القديمة تنعاد بالتوقيت الدقيق)
+const subsKey = (vid, src, d) => `subs/v2/${vid}__${src}__${d}.json`;
+const FAVS_KEY = "favorites.json";
 const activeKey = (vid, src, d) => `active/${vid}__${src}__${d}`;
 
 async function getJSON(env, key) {
@@ -261,6 +263,56 @@ async function ingest(request, env, id) {
   return json({ ok: true });
 }
 
+
+// ───────── المحفوظة (القلب) ─────────
+async function requireAuth(request, env) {
+  if (await safeEqual(request.headers.get("x-app-password") || "", env.APP_PASSWORD)) return null;
+  await sleep(800);
+  return json({ error: "كلمة المرور غير صحيحة." }, 401);
+}
+
+async function favorites(request, env, key) {
+  const denied = await requireAuth(request, env);
+  if (denied) return denied;
+  const favs = (await getJSON(env, FAVS_KEY)) || {};
+  if (request.method === "GET") {
+    const list = Object.values(favs).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+    return json({ favorites: list });
+  }
+  if (request.method === "DELETE") {
+    if (!key || !favs[key]) return json({ error: "غير موجود" }, 404);
+    delete favs[key];
+    await putJSON(env, FAVS_KEY, favs);
+    return json({ ok: true });
+  }
+  if (request.method === "POST") {
+    let b;
+    try {
+      b = JSON.parse((await request.text()).slice(0, 5000) || "{}");
+    } catch {
+      return json({ error: "طلب غير صالح." }, 400);
+    }
+    const vid = YT_ID.test(String(b.video_id || "")) ? b.video_id : null;
+    if (!vid || !(b.source in LANGS) || !(b.dialect in DIALECTS)) return json({ error: "بيانات غير صحيحة." }, 400);
+    const k = `${vid}__${b.source}__${b.dialect}`;
+    const old = favs[k] || {};
+    // تحديث المكان فقط (بدون إضافة) لو الفلم مو محفوظ
+    if (b.position_only && !favs[k]) return json({ ok: true, saved: false });
+    const num = (x, d) => (Number.isFinite(+x) && +x >= 0 ? Math.min(+x, 86400) : d);
+    favs[k] = {
+      key: k, video_id: vid, source: b.source, dialect: b.dialect,
+      title: String(b.title ?? old.title ?? "").slice(0, 200),
+      position: num(b.position, old.position || 0),
+      duration: num(b.duration, old.duration || 0),
+      added: old.added || Date.now(), updated: Date.now(),
+    };
+    if (Object.keys(favs).length > 300) return json({ error: "وصلت الحد (300 فلم محفوظ)." }, 400);
+    await putJSON(env, FAVS_KEY, favs);
+    return json({ ok: true, saved: true, favorite: favs[k] });
+  }
+  return json({ error: "غير مدعوم" }, 405);
+}
+
 export function toSrt(segments) {
   const ts = (t) => {
     let ms = Math.round(t * 1000);
@@ -297,6 +349,8 @@ export default {
       if (m && request.method === "GET") return getJob(request, env, m[1], Boolean(m[2]));
       m = path.match(/^\/api\/ingest\/([a-f0-9]{12})$/);
       if (m && request.method === "POST") return ingest(request, env, m[1]);
+      m = path.match(/^\/api\/favorites(?:\/([A-Za-z0-9_-]{11}__[a-z]+__[a-z]+))?$/);
+      if (m) return favorites(request, env, m[1]);
       if (path.startsWith("/api/")) return json({ error: "غير موجود" }, 404);
       return env.ASSETS.fetch(request);
     } catch (e) {

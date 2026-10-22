@@ -273,12 +273,14 @@ def http_json(url, headers, body: bytes, timeout=300, retries=4, service=""):
 
 
 def transcribe_chunk(path: Path, offset: float, lang):
+    """يفرّغ قطعة صوت ويرجع سطور ترجمة بتوقيت دقيق (من توقيت كل كلمة)."""
     boundary = "----mt" + uuid.uuid4().hex
-    fields = {"model": WHISPER_MODEL, "response_format": "verbose_json", "temperature": "0"}
+    fields = [("model", WHISPER_MODEL), ("response_format", "verbose_json"), ("temperature", "0"),
+              ("timestamp_granularities[]", "segment"), ("timestamp_granularities[]", "word")]
     if lang:
-        fields["language"] = lang
+        fields.append(("language", lang))
     parts = []
-    for k, v in fields.items():
+    for k, v in fields:
         parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
     parts.append(
         f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{path.name}"\r\n'
@@ -292,38 +294,70 @@ def transcribe_chunk(path: Path, offset: float, lang):
         {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
         b"".join(parts), service="Groq",
     )
-    out = []
-    for s in data.get("segments") or []:
-        text = (s.get("text") or "").strip()
-        if not text:
+    return [{"start": round(offset + l["start"], 2), "end": round(offset + l["end"], 2), "src": l["src"]}
+            for l in build_lines(data.get("segments") or [], data.get("words") or [])]
+
+
+MAX_LINE_SECONDS = 6.0     # أطول مدة لسطر الترجمة على الشاشة
+MAX_LINE_CHARS = 90        # أطول سطر (بالحروف الأصلية)
+PAUSE_BREAK = 0.9          # سكتة أطول من كذا = سطر جديد
+MIN_SHOW = 0.8             # أقل مدة يظهر فيها السطر
+
+
+def build_lines(segments, words):
+    """يبني سطور الترجمة من الكلمات: يبدأ السطر مع أول كلمة وينتهي مع آخر كلمة."""
+    words = sorted(
+        ({"w": str(w.get("word", "")).strip(), "s": float(w["start"]), "e": float(w["end"])}
+         for w in words if str(w.get("word", "")).strip() and "start" in w and "end" in w),
+        key=lambda x: x["s"],
+    )
+    lines, wi = [], 0
+    for seg in segments:
+        text = (seg.get("text") or "").strip()
+        if not text or (seg.get("no_speech_prob") or 0) > 0.85:   # موسيقى أو صمت
+            while wi < len(words) and (words[wi]["s"] + words[wi]["e"]) / 2 <= float(seg["end"]):
+                wi += 1
             continue
-        if (s.get("no_speech_prob") or 0) > 0.85:   # موسيقى أو صمت
+        s0, s1 = float(seg["start"]), float(seg["end"])
+        sw = []
+        while wi < len(words) and (words[wi]["s"] + words[wi]["e"]) / 2 <= s1 + 0.05:
+            if (words[wi]["s"] + words[wi]["e"]) / 2 >= s0 - 0.3:
+                sw.append(words[wi])
+            wi += 1
+        if not sw:   # ما فيه توقيت كلمات: نرجع لتوقيت الجملة
+            lines.append({"start": s0, "end": s1, "src": text})
             continue
-        out.append({"start": round(offset + float(s["start"]), 2), "end": round(offset + float(s["end"]), 2), "src": text})
-    return out
+        cur = []
+        for w in sw:
+            if cur:
+                dur = w["e"] - cur[0]["s"]
+                chars = sum(len(x["w"]) + 1 for x in cur) + len(w["w"])
+                gap = w["s"] - cur[-1]["e"]
+                ends_sentence = cur[-1]["w"][-1:] in ".?!…" and len(cur) >= 2
+                if dur > MAX_LINE_SECONDS or chars > MAX_LINE_CHARS or gap > PAUSE_BREAK or ends_sentence:
+                    lines.append(_line(cur))
+                    cur = []
+            cur.append(w)
+        if cur:
+            lines.append(_line(cur))
+    # أقل مدة ظهور، بدون ما يغطي السطر اللي بعده
+    for i, l in enumerate(lines):
+        nxt = lines[i + 1]["start"] if i + 1 < len(lines) else l["end"] + 5
+        if l["end"] - l["start"] < MIN_SHOW:
+            l["end"] = min(l["start"] + MIN_SHOW, nxt - 0.05)
+        l["end"] = max(l["end"], l["start"] + 0.3)
+    return lines
+
+
+def _line(ws):
+    text = " ".join(x["w"] for x in ws)
+    text = re.sub(r"\s+([,.?!…:;])", r"\1", text)
+    return {"start": ws[0]["s"], "end": ws[-1]["e"] + 0.15, "src": text}
 
 
 def split_long_segments(segs, max_len=7.0):
-    """يقسم الجمل الطويلة جداً عشان الترجمة ما تبقى على الشاشة مدة طويلة."""
-    out = []
-    for s in segs:
-        dur = s["end"] - s["start"]
-        words = s["src"].split()
-        if dur <= max_len or len(words) < 8:
-            out.append(s)
-            continue
-        n = min(int(dur // max_len) + 1, max(1, len(words) // 4))
-        per = len(words) / n
-        for i in range(n):
-            w = words[round(i * per): round((i + 1) * per)]
-            if not w:
-                continue
-            out.append({
-                "start": round(s["start"] + dur * i / n, 2),
-                "end": round(s["start"] + dur * (i + 1) / n, 2),
-                "src": " ".join(w),
-            })
-    return out
+    """صار التقسيم يتم بتوقيت الكلمات داخل build_lines؛ نخليها للتوافق."""
+    return segs
 
 
 # ───────────────────────── 3) الترجمة (Gemini / Groq / Claude) ─────────────────────────
