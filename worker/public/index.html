@@ -83,7 +83,8 @@ h1.brand{font-size:30px}
 .splash.hasvid::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(90% 60% at 50% 45%,#0000 0%,#0008 100%)}
 .splash>*:not(.spvid){position:relative;z-index:1}
 .splash .spsound{position:absolute!important;z-index:3!important;bottom:max(28px,env(safe-area-inset-bottom));left:22px;width:48px;height:48px;border-radius:50%;
-  border:1px solid #ffffff40;background:#0007;color:#fff;font-size:22px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);animation:rise .5s .4s both}
+  border:1px solid #ffffff30;background:#0006;color:#fff;font-size:20px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);animation:rise .5s .4s both,sphint 1.6s 1s ease-in-out infinite}
+@keyframes sphint{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
 .splash .logo.big{position:relative;width:88px;height:88px;border-radius:24px;will-change:transform;
   animation:pop .8s cubic-bezier(.18,1.35,.4,1) both, glow 2.2s .8s ease-in-out infinite}
 .splash .logo.big svg{width:48px;height:48px}
@@ -405,7 +406,7 @@ body.watching .tabbar{display:none}
 <body data-hp="home">
 <div class="splash" id="splash" aria-hidden="true">
   <video class="spvid" id="spvid" muted playsinline webkit-playsinline autoplay loop preload="auto"></video>
-  <button type="button" class="spsound hidden" id="spsound" aria-label="شغّل الصوت">🔊</button>
+  <button type="button" class="spsound hidden" id="spsound" aria-label="المس الشاشة للصوت">🔇</button>
   <div class="logo big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M6 15h4M13 15h5M6 11h8M16 11h2"/></svg></div>
   <div class="brand xl" data-s="name">فهّمني</div>
   <div class="tag" data-s="splash">نفهّمك أي فلم بلهجتك 🍿</div>
@@ -1120,12 +1121,21 @@ body.watching .tabbar{display:none}
         ac.createMediaElementSource(v).connect(gain).connect(ac.destination); return true; } catch { ac = null; return false; }
     };
     const btn = $("#spsound");
-    const unmute = () => { wire(); try { ac?.resume?.(); } catch {} v.muted = false; v.play?.().catch(() => {}); btn.classList.add("hidden"); };
+    let unmuted = false;
+    const unmute = () => {   // الصوت يطلع بتدرّج ناعم أول ما يلمس الشاشة
+      if (unmuted || $("#splash").classList.contains("out")) return; unmuted = true;
+      wire(); try { ac?.resume?.(); } catch {}
+      try { if (gain && ac) { const t = ac.currentTime; gain.gain.setValueAtTime(0.0001, t); gain.gain.linearRampToValueAtTime(vol, t + 0.5); } } catch {}
+      v.muted = false; v.play?.().catch(() => {}); btn.classList.add("hidden");
+      ["touchend", "pointerup", "click", "keydown"].forEach(ev => document.removeEventListener(ev, unmute, true));
+    };
     if (want) {
       wire(); v.muted = false;
-      v.play?.().then(() => { if (ac && ac.state === "suspended") { v.muted = true; btn.classList.remove("hidden"); } })
-        .catch(() => { v.muted = true; v.play?.().catch(() => {}); btn.classList.remove("hidden"); });
-      btn.onclick = e => { e.stopPropagation(); unmute(); };
+      const blocked = () => {   // الآيفون منع الصوت: أي لمسة في أي مكان تشغّله
+        v.muted = true; v.play?.().catch(() => {}); btn.classList.remove("hidden");
+        ["touchend", "pointerup", "click", "keydown"].forEach(ev => document.addEventListener(ev, unmute, { capture: true, passive: true }));
+      };
+      v.play?.().then(() => { if (ac && ac.state === "suspended") blocked(); else unmuted = true; }).catch(blocked);
     } else v.play?.().catch(() => {});
     // نهاية الافتتاحية: الصوت ينزل تدريجياً بدل ما ينقطع
     window.__fadeSplashAudio = (ms = 900) => {
