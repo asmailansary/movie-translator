@@ -599,7 +599,7 @@ async function pushApi(request, env, action) {
     return json({ ok: true });
   }
   if (action === "test") {
-    const n = await notifyAll(env, { title: "التنبيهات شغّالة ✅", body: "كذا بيوصلك خبر أول ما يجهز فلمك 🍿", url: "/" }, new URL(request.url).origin, [dev]);
+    const n = await notifyAll(env, { title: "فهّمني 🍿", body: "تم وكذا بيوصلك خبر أول ما يجهز محتواك✨", url: "/" }, new URL(request.url).origin, [dev]);
     return json({ ok: true, sent: n });
   }
   return json({ error: "غير موجود" }, 404);
