@@ -208,6 +208,9 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
         <button class="btn danger" type="button" id="resetSp" style="flex:1">احذفه</button>
       </div>
       <input type="file" id="spFile" accept="video/mp4,video/quicktime,video/*" class="hidden">
+      <div class="row"><div class="lbl">صوت الفيديو 🔊<small>الآيفون يمنع الصوت أول ما ينفتح التطبيق، فيطلع زر 🔊 صغير ولمسة وحدة تشغّله</small></div><label class="sw"><input type="checkbox" id="s_splash_video_sound"><i></i></label></div>
+      <div id="spVolBox"><label class="f">ارتفاع الصوت: <b id="spVolV"></b></label>
+      <input type="range" id="s_splash_video_volume" min="5" max="100" step="5" style="width:100%;accent-color:var(--accent)"></div>
       <label class="f">وضوح الفيديو: <b id="spOpV"></b></label>
       <input type="range" id="s_splash_video_opacity" min="5" max="100" step="5" style="width:100%;accent-color:var(--accent)">
       <p class="note">💡 الأفضل لقطة ٥-١٠ ثواني بالطول (مثل مقاس الجوال). ولو تبي الشعار يبان أكثر خفّف الوضوح. استخدم لقطات عندك حق استخدامها.</p>
@@ -437,7 +440,7 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     for (const k of ["name", "tagline", "splash", "announcement", "snap_url", "maintenance_msg", "daily_per_device", "daily_total", "font_size"]) {
       const el = $("#s_" + k); el.value = val(k) ?? ""; el.oninput = () => set(k, el.type === "number" ? +el.value : el.value);
     }
-    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_skip", "show_songs", "show_upload"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
+    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_skip", "show_songs", "show_upload", "splash_video_sound"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
     const sp = $("#s_splash_ms"), spv = () => { $("#splashV").textContent = (val("splash_ms") / 1000).toFixed(1) + " ثانية"; };
     sp.value = val("splash_ms"); spv(); sp.oninput = () => { set("splash_ms", +sp.value); spv(); };
     const tv = $("#s_tap_volume"), tvv = () => { $("#tapVolV").textContent = val("tap_volume") + "٪"; };
@@ -447,6 +450,11 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     splVid.classList.toggle("hidden", !S.splash_video); $("#resetSp").classList.toggle("hidden", !S.splash_video);
     if (S.splash_video && splVid.dataset.src !== spSrc) { splVid.dataset.src = spSrc; splVid.src = spSrc; }
     splVid.style.opacity = (val("splash_video_opacity") ?? 45) / 100;
+    const sv = $("#s_splash_video_volume"); sv.value = val("splash_video_volume") ?? 60; $("#spVolV").textContent = sv.value + "٪";
+    $("#spVolBox").classList.toggle("hidden", val("splash_video_sound") !== true);
+    splVid.muted = val("splash_video_sound") !== true; splVid.volume = (val("splash_video_volume") ?? 60) / 100;
+    sv.oninput = () => { set("splash_video_volume", +sv.value); $("#spVolV").textContent = sv.value + "٪"; splVid.volume = sv.value / 100; };
+    $("#s_splash_video_sound").addEventListener("change", () => setTimeout(render, 0), { once: true });
     const so = $("#s_splash_video_opacity"); so.value = val("splash_video_opacity") ?? 45; $("#spOpV").textContent = so.value + "٪";
     so.oninput = () => { set("splash_video_opacity", +so.value); $("#spOpV").textContent = so.value + "٪"; splVid.style.opacity = so.value / 100; };
     // الانترو

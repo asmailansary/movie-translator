@@ -38,6 +38,8 @@ export const DEFAULT_SETTINGS = {
   splash_video: false,      // فيديو خلف شاشة الافتتاح
   splash_video_v: 0,
   splash_video_opacity: 45, // شفافية الفيديو (٠-١٠٠)
+  splash_video_sound: false, // صوت فيديو الافتتاحية
+  splash_video_volume: 60,  // ارتفاع صوته (٠-١٠٠)
   default_dialect: "najdi",
   font_size: 12,
   daily_per_device: 8,
@@ -103,9 +105,10 @@ function clean(input, current) {
     const u = str(input.snap_url, 200);
     out.snap_url = /^https:\/\/([a-z0-9-]+\.)*snapchat\.com\//i.test(u) ? u : current.snap_url;
   }
-  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_on", "intro_skip", "show_songs", "show_upload"]) if (k in input) out[k] = bool(input[k]);
+  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_on", "intro_skip", "show_songs", "show_upload", "splash_video_sound"]) if (k in input) out[k] = bool(input[k]);
   if (input.intro_every === "always" || input.intro_every === "daily") out.intro_every = input.intro_every;
   if (input.intro_where === "all" || input.intro_where === "films") out.intro_where = input.intro_where;
+  if ("splash_video_volume" in input) out.splash_video_volume = int(input.splash_video_volume, 0, 100, current.splash_video_volume ?? 60);
   if ("splash_video_opacity" in input) out.splash_video_opacity = int(input.splash_video_opacity, 5, 100, current.splash_video_opacity ?? 45);
   if (input.dialect_names && typeof input.dialect_names === "object") {
     const n = {};
