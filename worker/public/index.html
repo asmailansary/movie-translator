@@ -1108,7 +1108,8 @@ body.watching .tabbar{display:none}
   // فيديو خلف الافتتاحية (من لوحة التحكم): يطلع بالشفافية اللي اختارها الأدمن
   (() => {
     if (!S.splash_video) return;
-    const v = $("#spvid"); $("#splash").classList.add("hasvid");
+    const v = $("#spvid"); $("#splash").classList.add("hasvid"); window.__splashVid = v;
+    if (S.splash_match_video) v.loop = false;   // الافتتاحية تمشي مع الفيديو مرة وحدة
     v.src = "/brand/splash?v=" + (S.splash_video_v || 0);
     const op = Math.max(.05, Math.min(1, (S.splash_video_opacity ?? 45) / 100));
     v.addEventListener("playing", () => { v.style.opacity = op; }, { once: true });
@@ -1146,10 +1147,29 @@ body.watching .tabbar{display:none}
     };
 
   })();
-  const splashMin = Math.max(300, Math.min(6000, S.splash_ms || 1700)), t0 = performance.now();
-  const hideSplash = () => setTimeout(() => { window.__fadeSplashAudio?.(); $("#splash").classList.add("out"); animate(document.querySelector(".wrap"), "app-in"); }, Math.max(0, splashMin - (performance.now() - t0)));
-  if (document.readyState === "complete") hideSplash(); else window.addEventListener("load", hideSplash, { once: true });
-  setTimeout(() => { if (!$("#splash").classList.contains("out")) { window.__fadeSplashAudio?.(); $("#splash").classList.add("out"); } }, splashMin + 2500);
+  const t0 = performance.now();
+  let splashMin = Math.max(300, Math.min(6000, S.splash_ms || 1700));
+  const closeSplash = () => {
+    if ($("#splash").classList.contains("out")) return;
+    window.__fadeSplashAudio?.(); $("#splash").classList.add("out"); animate(document.querySelector(".wrap"), "app-in");
+  };
+  const hideSplash = () => setTimeout(closeSplash, Math.max(0, splashMin - (performance.now() - t0)));
+  const sv = window.__splashVid;
+  if (S.splash_match_video && S.splash_video && sv) {
+    // مدة الافتتاحية = مدة الفيديو: تقفل مع نهايته (والصوت يبدأ يتلاشى قبلها بثانية)
+    let pageLoaded = document.readyState === "complete", videoEnded = false, gotMeta = false;
+    const tryClose = () => { if (pageLoaded && videoEnded) closeSplash(); };
+    window.addEventListener("load", () => { pageLoaded = true; tryClose(); }, { once: true });
+    sv.addEventListener("loadedmetadata", () => { gotMeta = true; }, { once: true });
+    sv.addEventListener("timeupdate", () => { if (isFinite(sv.duration) && sv.currentTime >= sv.duration - 0.9) { videoEnded = true; tryClose(); } });
+    sv.addEventListener("ended", () => { videoEnded = true; tryClose(); }, { once: true });
+    sv.addEventListener("error", () => { videoEnded = true; tryClose(); }, { once: true });
+    setTimeout(() => { if (!gotMeta) { videoEnded = true; tryClose(); } }, 4000);   // الفيديو ما اشتغل: نكمل عادي
+    setTimeout(closeSplash, 32000);   // أقصى شي ٣٠ ثانية
+  } else {
+    if (document.readyState === "complete") hideSplash(); else window.addEventListener("load", hideSplash, { once: true });
+    setTimeout(closeSplash, splashMin + 2500);
+  }
 
   // ───── تبديل اللهجة وانت تتفرج (بدون ما يوقف الفلم)
   async function switchDialect(d) {
