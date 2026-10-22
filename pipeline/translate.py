@@ -134,27 +134,37 @@ def extract_video_id(url: str):
 
 
 # ───────────────────────── 1) تحميل الصوت ─────────────────────────
-def download_audio(vid, workdir: Path):
-    import yt_dlp  # يُستورد هنا عشان الخادم يشتغل حتى لو كان التحميل معطّل
+_ROUTE = {"proxy": None}   # الطريقة اللي نجحت مع يوتيوب، نعيد استخدامها
+
+
+def download_audio(vid, workdir: Path, stem="audio", section_end=None):
+    """يسحب الصوت بس (بدون فيديو). section_end = يسحب من البداية لهذي الثانية بس."""
+    import yt_dlp  # يُستورد هنا عشان السكربت يشتغل حتى لو كان التحميل معطّل
+    from yt_dlp.utils import download_range_func
 
     url = f"https://www.youtube.com/watch?v={vid}"
     opts = {
         "format": "bestaudio/best",
-        "outtmpl": str(workdir / "audio.%(ext)s"),
+        "outtmpl": str(workdir / f"{stem}.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
         "retries": 3,
+        "concurrent_fragment_downloads": 4,
     }
+    if section_end:
+        opts["download_ranges"] = download_range_func(None, [(0, section_end)])
     if YT_COOKIES.strip():
         cookie_file = workdir / "cookies.txt"
         cookie_file.write_text(YT_COOKIES)
         opts["cookiefile"] = str(cookie_file)
 
     # نجرب أول عن طريق Cloudflare WARP (لو اشتغل)، وبعدها مباشرة
-    routes = [p for p in (os.environ.get("YTDLP_PROXY", "").strip(), "") if p is not None]
-    routes = list(dict.fromkeys(routes))
-    last_err = None
+    if _ROUTE["proxy"] is not None:
+        routes = [_ROUTE["proxy"]]
+    else:
+        routes = list(dict.fromkeys([os.environ.get("YTDLP_PROXY", "").strip(), ""]))
+    last_err, info = None, {}
     for proxy in routes:
         o = dict(opts)
         if proxy:
@@ -166,27 +176,28 @@ def download_audio(vid, workdir: Path):
                 if duration and duration > MAX_MINUTES * 60:
                     raise UserError(f"الفلم أطول من الحد المسموح ({MAX_MINUTES} دقيقة).")
                 ydl.download([url])
-            print("✓ تم التحميل", "عن طريق WARP" if proxy else "مباشرة")
+            print("✓ تم التحميل", stem, "عن طريق WARP" if proxy else "مباشرة")
+            _ROUTE["proxy"] = proxy
             break
         except UserError:
             raise
         except Exception as e:  # noqa: BLE001
             print("✗ فشل التحميل", "عن طريق WARP:" if proxy else "مباشرة:", str(e)[:300])
             last_err = e
-            for p in workdir.glob("audio.*"):
+            for p in workdir.glob(f"{stem}.*"):
                 p.unlink(missing_ok=True)
     else:
         raise last_err
 
-    files = [p for p in workdir.glob("audio.*") if p.suffix != ".part"]
+    files = [p for p in workdir.glob(f"{stem}.*") if p.suffix not in (".part", ".ytdl")]
     if not files:
         raise UserError("ما قدرت أحمّل صوت الفلم من يوتيوب.")
-    return files[0], info.get("title") or "", duration
+    return files[0], info.get("title") or "", info.get("duration") or 0
 
 
-def split_audio(src: Path, workdir: Path):
-    """يحوّل الصوت لقطع mp3 صغيرة (أحادي 16kHz) ويرجع [(ملف، بداية القطعة بالثواني)]."""
-    out_dir = workdir / "chunks"
+def split_audio(src: Path, workdir: Path, name="chunks"):
+    """يحوّل الصوت لقطع mp3 صغيرة (أحادي 16kHz) ويرجع [(ملف، بداية القطعة، نهايتها)]."""
+    out_dir = workdir / name
     out_dir.mkdir()
     subprocess.run(
         [
@@ -200,7 +211,7 @@ def split_audio(src: Path, workdir: Path):
     chunks, offset = [], 0.0
     for f in sorted(out_dir.glob("c*.mp3")):
         dur = probe_duration(f)
-        chunks.append((f, offset))
+        chunks.append((f, offset, offset + dur))
         offset += dur
     return chunks
 
@@ -499,36 +510,60 @@ def validate_inputs():
 # ───────────────────────── تشغيل المهمة كاملة ─────────────────────────
 def run():
     workdir = Path(tempfile.mkdtemp(prefix="mt_"))
-    report(status="running", stage="تحميل صوت الفلم من يوتيوب…", progress=0.03)
-    audio, title, duration = download_audio(VIDEO_ID, workdir)
-    report(title=title, duration=duration, stage="تجهيز الصوت…", progress=0.08)
+    report(status="running", stage="سحب صوت أول جزء…", progress=0.03)
 
-    chunks = split_audio(audio, workdir)
-    total = len(chunks)
+    # ١) نسحب أول ١٠ دقائق من الصوت بس، عشان تبدأ المشاهدة بسرعة
+    first, title, duration = download_audio(VIDEO_ID, workdir, stem="first", section_end=CHUNK_SECONDS)
+    long_movie = bool(duration) and duration > CHUNK_SECONDS + 30
+    total = max(1, -(-int(duration or CHUNK_SECONDS) // CHUNK_SECONDS))
+    report(title=title, duration=duration, stage="تفريغ وترجمة أول جزء…", progress=0.06)
+
     system = build_system_prompt(DIALECT, title)
     lang = SOURCE_LANGS[SOURCE]["code"]
+    chunk_q: queue.Queue = queue.Queue()   # قطع الصوت الجاهزة
+    seg_q: queue.Queue = queue.Queue()     # الجمل المفرّغة الجاهزة للترجمة
 
-    # التفريغ يشتغل بخيط لحاله، والترجمة تمشي وراه قطعة قطعة
-    q: queue.Queue = queue.Queue()
+    # ٢) سحب الباقي في الخلفية وانت تتفرج
+    def downloader():
+        try:
+            if long_movie:
+                chunk_q.put(split_audio(first, workdir, "first_chunks")[0])
+                full, _, _ = download_audio(VIDEO_ID, workdir, stem="full")
+                for ch in split_audio(full, workdir, "full_chunks")[1:]:
+                    chunk_q.put(ch)
+            else:
+                for ch in split_audio(first, workdir, "first_chunks"):
+                    chunk_q.put(ch)
+        except Exception as e:  # noqa: BLE001
+            chunk_q.put(e)
+        chunk_q.put(None)
 
     def transcriber():
         try:
-            for path, offset in chunks:
-                q.put(("ok", split_long_segments(transcribe_chunk(path, offset, lang))))
+            while True:
+                ch = chunk_q.get()
+                if ch is None:
+                    break
+                if isinstance(ch, Exception):
+                    raise ch
+                path, start, end = ch
+                seg_q.put(("ok", (split_long_segments(transcribe_chunk(path, start, lang)), end)))
         except Exception as e:  # noqa: BLE001
-            q.put(("err", e))
-        q.put(("done", None))
+            seg_q.put(("err", e))
+        seg_q.put(("done", None))
 
+    threading.Thread(target=downloader, daemon=True).start()
     threading.Thread(target=transcriber, daemon=True).start()
 
-    done_chunks, context, pool = 0, [], ThreadPoolExecutor(TRANSLATE_WORKERS)
+    # ٣) الترجمة تمشي ورا التفريغ قطعة قطعة
+    done_chunks, context, pool, pending = 0, [], ThreadPoolExecutor(TRANSLATE_WORKERS), None
     while True:
-        kind, val = q.get()
+        kind, val = seg_q.get()
         if kind == "err":
             raise val
         if kind == "done":
             break
-        segs = val
+        segs, chunk_end = val
         batches = [segs[i: i + TRANSLATE_BATCH] for i in range(0, len(segs), TRANSLATE_BATCH)]
         futures = []
         for bi, batch in enumerate(batches):
@@ -540,17 +575,14 @@ def run():
         if segs:
             context = [s["src"] for s in segs[-3:]]
         done_chunks += 1
-        last = done_chunks >= total
         report(
             append=segs,
-            stage="خلصت الترجمة ✓" if last else f"ترجمة… ({done_chunks} من {total})",
-            progress=1.0 if last else round(0.08 + 0.92 * done_chunks / max(total, 1), 3),
-            ready_until=10**9 if last else chunks[done_chunks][1],
-            **({"status": "done"} if last else {}),
+            stage=f"ترجمة… ({done_chunks} من {total})",
+            progress=round(0.06 + 0.92 * min(done_chunks, total) / total, 3),
+            ready_until=chunk_end,
         )
     pool.shutdown()
-    if total == 0:
-        report(status="done", stage="خلصت الترجمة ✓", progress=1.0, ready_until=10**9)
+    report(status="done", stage="خلصت الترجمة ✓", progress=1.0, ready_until=10**9)
 
 
 def friendly_error(e):
