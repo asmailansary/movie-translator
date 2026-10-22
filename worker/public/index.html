@@ -79,6 +79,7 @@ h1.brand{font-size:30px}
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:6vh;
   transition:opacity .55s cubic-bezier(.4,0,.2,1),transform .55s cubic-bezier(.4,0,.2,1),visibility .55s;will-change:opacity,transform}
 .splash.out{opacity:0;visibility:hidden;transform:scale(1.08)}
+.splash.skip{transition:opacity 1s cubic-bezier(.4,0,.2,1),transform 1.2s cubic-bezier(.22,1,.36,1),visibility 1s;transform:scale(1.12)}
 .splash .spvid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s ease;pointer-events:none;z-index:0}
 .splash.hasvid::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(90% 60% at 50% 45%,#0000 0%,#0008 100%)}
 .splash>*:not(.spvid){position:relative;z-index:1}
@@ -1128,18 +1129,21 @@ body.watching .tabbar{display:none}
       wire(); try { ac?.resume?.(); } catch {}
       try { if (gain && ac) { const t = ac.currentTime; gain.gain.setValueAtTime(0.0001, t); gain.gain.linearRampToValueAtTime(vol, t + 0.5); } } catch {}
       v.muted = false; v.play?.().catch(() => {}); btn.classList.add("hidden");
+      window.__splashUnmutedAt = performance.now(); window.__splashSoundPending = false;
       ["touchend", "pointerup", "click", "keydown"].forEach(ev => document.removeEventListener(ev, unmute, true));
     };
     if (want) {
       wire(); v.muted = false;
       const blocked = () => {   // الآيفون منع الصوت: أي لمسة في أي مكان تشغّله
-        v.muted = true; v.play?.().catch(() => {}); btn.classList.remove("hidden");
+        v.muted = true; v.play?.().catch(() => {}); btn.classList.remove("hidden"); window.__splashSoundPending = true;
         ["touchend", "pointerup", "click", "keydown"].forEach(ev => document.addEventListener(ev, unmute, { capture: true, passive: true }));
       };
       v.play?.().then(() => { if (ac && ac.state === "suspended") blocked(); else unmuted = true; }).catch(blocked);
     } else v.play?.().catch(() => {});
     // نهاية الافتتاحية: الصوت ينزل تدريجياً بدل ما ينقطع
+    let fading = false;
     window.__fadeSplashAudio = (ms = 900) => {
+      if (fading) return; fading = true;
       // بعد ما تختفي الافتتاحية نوقف الفيديو كامل (يوفّر البطارية)
       setTimeout(() => { v.pause(); v.removeAttribute("src"); v.load(); try { ac?.close?.(); } catch {} }, want && !v.muted ? ms + 150 : 700);
       if (!want || v.muted) return;
@@ -1154,6 +1158,19 @@ body.watching .tabbar{display:none}
     window.__fadeSplashAudio?.(); $("#splash").classList.add("out"); animate(document.querySelector(".wrap"), "app-in");
   };
   const hideSplash = () => setTimeout(closeSplash, Math.max(0, splashMin - (performance.now() - t0)));
+  // لمسة على الشاشة تتخطى الافتتاحية بتلاشي ناعم (لو الصوت ينتظر لمسة، أول لمسة للصوت والثانية للتخطي)
+  if (S.splash_tap_skip !== false) {
+    const skip = () => {
+      const sp = $("#splash"); if (sp.classList.contains("out")) return document.removeEventListener("pointerup", skip, true);
+      if (window.__splashSoundPending) return;
+      if (performance.now() - (window.__splashUnmutedAt || -1e9) < 600) return;   // نفس اللمسة اللي شغّلت الصوت
+      if (performance.now() - t0 < 350) return;
+      sp.classList.add("skip"); window.__fadeSplashAudio?.(1000);
+      requestAnimationFrame(closeSplash);
+      document.removeEventListener("pointerup", skip, true);
+    };
+    document.addEventListener("pointerup", skip, { capture: true, passive: true });
+  }
   const sv = window.__splashVid;
   if (S.splash_match_video && S.splash_video && sv) {
     // مدة الافتتاحية = مدة الفيديو: تقفل مع نهايته (والصوت يبدأ يتلاشى قبلها بثانية)
