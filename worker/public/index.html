@@ -397,9 +397,23 @@ html[data-theme=light] .amb{opacity:0!important}
   display:flex;justify-content:space-around;padding:8px 6px;border-radius:30px;
   background:color-mix(in srgb,var(--surface) 78%,transparent);border:1px solid color-mix(in srgb,var(--text) 14%,transparent);
   -webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);box-shadow:0 10px 30px #0007}
-.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:inherit;font-size:12px;color:var(--muted);background:none;border:0;border-radius:22px;padding:7px 4px}
-.tabbar button svg{width:26px;height:26px}
-.tabbar button[aria-pressed=true]{color:var(--text);background:color-mix(in srgb,var(--text) 10%,transparent);font-weight:700}
+.tabbar button{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:inherit;font-size:12px;color:var(--muted);
+  background:none!important;border:0;border-radius:22px;padding:7px 4px;transform:none!important;opacity:1!important;touch-action:none;
+  transition:color .25s}
+.tabbar button svg{width:26px;height:26px;transition:transform .35s cubic-bezier(.3,1.6,.5,1)}
+.tabbar button[aria-pressed=true]{color:var(--text);font-weight:700}
+.tabbar button.hot svg{transform:scale(1.16)}
+/* فقاعة زجاجية تنزلق بين الأزرار: لما تلمس ترتفع وتصير عدسة، ولما تترك تنزل بنعومة على الزر */
+.tabbar{touch-action:none}
+.tabbar .pill{position:absolute;z-index:0;top:8px;bottom:8px;left:0;width:var(--w,0px);border-radius:22px;pointer-events:none;
+  transform:translateX(var(--x,0px)) scale(1);background:color-mix(in srgb,var(--text) 11%,transparent);
+  transition:transform .6s cubic-bezier(.25,1.45,.45,1),width .45s cubic-bezier(.25,1.2,.45,1),background .35s,box-shadow .35s,backdrop-filter .35s}
+.tabbar.lift .pill{transform:translateX(var(--x,0px)) scale(1.16,1.3);background:color-mix(in srgb,var(--text) 6%,transparent);
+  -webkit-backdrop-filter:blur(1.5px) saturate(1.9) brightness(1.18);backdrop-filter:blur(1.5px) saturate(1.9) brightness(1.18);
+  box-shadow:inset 0 0 0 1px #ffffff55,inset 3px 0 7px #ff5a7a55,inset -3px 0 7px #4fb4ff55,inset 0 2px 6px #ffffff40,0 10px 26px #0006;
+  transition:transform .32s cubic-bezier(.25,1.45,.45,1),width .3s,background .2s,box-shadow .2s}
+.tabbar.drag .pill{transition:transform .09s linear,width .2s,background .2s,box-shadow .2s}
+html[data-theme=light] .tabbar.lift .pill{box-shadow:inset 0 0 0 1px #0000001f,inset 3px 0 7px #ff5a7a40,inset -3px 0 7px #4fb4ff40,0 10px 24px #0002}
 .tabbar button.plus svg{color:var(--accent)}
 body.watching .tabbar{display:none}
 </style>
@@ -561,6 +575,7 @@ body.watching .tabbar{display:none}
   </a>
 
   <nav class="tabbar home-only" id="tabbar" aria-label="التنقل">
+    <i class="pill" id="tabPill" aria-hidden="true"></i>
     <button type="button" data-hp="home" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg>الرئيسية</button>
     <button type="button" data-hp="new" class="plus" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="6"/><path d="M12 8v8M8 12h8"/></svg>ترجم جديد</button>
     <button type="button" data-hp="saved" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7-4.3-8.8-8.5C1.9 8.3 3.8 5 7.1 5c2 0 3.4 1 4.2 2.3h1.4C13.5 6 14.9 5 16.9 5c3.3 0 5.2 3.3 3.9 6.5C19 15.7 12 20 12 20z"/></svg>المحفوظة</button>
@@ -1631,10 +1646,45 @@ body.watching .tabbar{display:none}
   function setHP(p) {
     document.body.dataset.hp = p;
     document.querySelectorAll("#tabbar button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.hp === p)));
+    placePill();
     window.scrollTo({ top: 0 }); animate(document.querySelector(".wrap"), "screen-in");
     if (p === "new") setTimeout(() => { try { $("#url").focus({ preventScroll: true }); } catch {} }, 350);
   }
-  document.querySelectorAll("#tabbar button").forEach(b => b.onclick = () => setHP(b.dataset.hp));
+  // ───── شريط التنقل: فقاعة زجاجية تتبع إصبعك (مثل أزرار الآيفون الجديدة)
+  const tabbar = $("#tabbar"), pill = $("#tabPill"), tabs = [...tabbar.querySelectorAll("button")];
+  const tabAt = x => tabs.reduce((best, b) => { const r = b.getBoundingClientRect(), d = Math.abs(x - (r.left + r.width / 2)); return d < best.d ? { b, d } : best; }, { b: tabs[0], d: 1e9 }).b;
+  function placePill(btn, centerX) {
+    btn = btn || tabs.find(b => b.getAttribute("aria-pressed") === "true") || tabs[0];
+    const w = btn.offsetWidth, barW = tabbar.clientWidth;
+    let x = centerX == null ? btn.offsetLeft : centerX - tabbar.getBoundingClientRect().left - w / 2;
+    x = Math.max(6, Math.min(barW - w - 6, x));
+    tabbar.style.setProperty("--x", x + "px"); tabbar.style.setProperty("--w", w + "px");
+  }
+  let press = null;
+  tabbar.addEventListener("pointerdown", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    press = { id: e.pointerId, x0: e.clientX, moved: false };
+    try { tabbar.setPointerCapture(e.pointerId); } catch {}
+    tabbar.classList.add("lift"); placePill(b, e.clientX);
+    tabs.forEach(t => t.classList.toggle("hot", t === b));
+  });
+  tabbar.addEventListener("pointermove", e => {
+    if (!press || e.pointerId !== press.id) return;
+    if (Math.abs(e.clientX - press.x0) > 6) { press.moved = true; tabbar.classList.add("drag"); }
+    const b = tabAt(e.clientX); placePill(b, e.clientX);
+    tabs.forEach(t => t.classList.toggle("hot", t === b));
+  });
+  const release = e => {
+    if (!press || (e && e.pointerId !== press.id)) return;
+    const b = tabAt(e ? e.clientX : 0); press = null;
+    tabbar.classList.remove("lift", "drag"); tabs.forEach(t => t.classList.remove("hot"));
+    if (b.dataset.hp !== document.body.dataset.hp) setHP(b.dataset.hp); else placePill(b);
+  };
+  tabbar.addEventListener("pointerup", release);
+  tabbar.addEventListener("pointercancel", () => { press = null; tabbar.classList.remove("lift", "drag"); tabs.forEach(t => t.classList.remove("hot")); placePill(); });
+  tabs.forEach(b => b.onclick = e => { if (e.detail === 0) setHP(b.dataset.hp); });   // لوحة المفاتيح بس (اللمس يمر من فوق)
+  window.addEventListener("resize", () => placePill());
+  requestAnimationFrame(() => placePill());
   document.querySelectorAll("#hchips button").forEach(b => b.onclick = () => {
     if (b.dataset.go) return setHP(b.dataset.go);
     homeFilter = b.dataset.f;
