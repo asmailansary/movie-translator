@@ -536,6 +536,35 @@ async function handoff(request, env, action) {
   return json({ error: "غير موجود" }, 404);
 }
 
+// ───────── أغلفة الأفلام ومعلوماتها (من يوتيوب) ─────────
+// الغلاف يمر من عندنا: نفس الموقع (الألوان تنقرى للخلفية) ويتخزّن في الكاش
+async function thumb(request, env, ctx, vid) {
+  const cache = typeof caches !== "undefined" ? caches.default : null, ck = new Request(new URL(`/thumb/${vid}.jpg`, request.url).toString());
+  const hit = cache && (await cache.match(ck).catch(() => null)); if (hit) return hit;
+  let r = null;
+  try {
+  for (const q of ["maxresdefault", "sddefault", "hqdefault"]) {
+    const x = await fetch(`https://i.ytimg.com/vi/${vid}/${q}.jpg`, { cf: { cacheTtl: 604800 } });
+    if (x.ok && +(x.headers.get("content-length") || 9999) > 2000) { r = x; break; }   // يوتيوب يرجّع صورة رمادية صغيرة لو ما فيه
+  } } catch {}
+  if (!r) return new Response("", { status: 404 });
+  const res = new Response(r.body, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=604800", "x-content-type-options": "nosniff" } });
+  if (cache) ctx.waitUntil(cache.put(ck, res.clone()).catch(() => {}));
+  return res;
+}
+async function meta(env, vid) {
+  const key = `meta/${vid}.json`;
+  const have = await getJSON(env, key); if (have) return json(have);
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent("https://www.youtube.com/watch?v=" + vid)}`);
+    if (!r.ok) return json({ title: "", channel: "" });
+    const d = await r.json();
+    const out = { title: String(d.title || "").slice(0, 200), channel: String(d.author_name || "").slice(0, 100) };
+    await putJSON(env, key, out);
+    return json(out);
+  } catch { return json({ title: "", channel: "" }); }
+}
+
 // ───────── المستخدمين (تمهيداً لإرسال إشعارات للكل لاحقاً) ─────────
 // نحفظ بس رمز الجهاز العشوائي وتواريخ الاستخدام، بدون أي معلومات شخصية
 async function hello(request, env) {
@@ -690,6 +719,10 @@ export default {
       if (path === "/api/hello" && request.method === "POST") return hello(request, env);
       m = path.match(/^\/api\/handoff\/(create|claim)$/);
       if (m && request.method === "POST") return handoff(request, env, m[1]);
+      m = path.match(/^\/thumb\/([A-Za-z0-9_-]{11})\.jpg$/);
+      if (m && request.method === "GET") return thumb(request, env, ctx, m[1]);
+      m = path.match(/^\/api\/meta\/([A-Za-z0-9_-]{11})$/);
+      if (m && request.method === "GET") return meta(env, m[1]);
       if (path === "/api/settings" && request.method === "GET") return json(publicSettings(await getSettings(env)));
       m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast|tap|tap-reset|intro|intro-reset|stats-reset)$/);
       if (m) return adminApi(request, env, ctx, m[1], safeEqual);
