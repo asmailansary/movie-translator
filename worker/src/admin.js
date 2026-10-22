@@ -240,7 +240,7 @@ export async function adminApi(request, env, ctx, action, safeEqual) {
     if (!body) return json({ error: "اكتب نص الإشعار ✍️" }, 400);
     const devices = await allPushDevices(env);
     const origin = new URL(request.url).origin;
-    ctx.waitUntil(notifyAll(env, { title, body, url: "/" }, origin, devices).catch(() => {}));
+    ctx.waitUntil(notifyAll(env, { ...asTitle(body), url: "/" }, origin, devices).catch(() => {}));
     return json({ ok: true, devices: devices.length });
   }
   return json({ error: "غير موجود" }, 404);
@@ -275,4 +275,15 @@ export async function serveTap(env) {
   const obj = await env.BUCKET.get("config/tap-sound");
   if (!obj) return new Response("", { status: 404 });
   return new Response(obj.body, { headers: { "content-type": obj.httpMetadata?.contentType || "audio/mpeg", "cache-control": "public, max-age=3600", "x-content-type-options": "nosniff" } });
+}
+
+/** النص يصير هو عنوان الإشعار (عشان ما يتكرر اسم التطبيق فوق «from»).
+ *  لو طويل: أول جملة عنوان، والباقي تحت. */
+export function asTitle(text) {
+  const t = String(text || "").trim();
+  if (t.length <= 60 && !t.includes("\n")) return { title: t, body: "" };
+  const m = t.match(/^(.{8,60}?[.!؟?…✨🎉🍿\n])\s*([\s\S]+)$/u);
+  if (m) return { title: m[1].trim(), body: m[2].trim() };
+  const cut = t.lastIndexOf(" ", 55);
+  return { title: t.slice(0, cut > 20 ? cut : 55).trim(), body: t.slice(cut > 20 ? cut : 55).trim() };
 }
