@@ -10,10 +10,15 @@
 <meta name="apple-mobile-web-app-title" content="فهّمني">
 <meta name="application-name" content="فهّمني">
 <meta name="format-detection" content="telephone=no">
-<link rel="manifest" href="/manifest.webmanifest?v=3">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
-<link rel="icon" href="/icon-192.png">
+<link rel="manifest" href="/app.webmanifest">
+<link rel="apple-touch-icon" href="/brand/icon-180.png" id="touchIcon">
+<link rel="icon" href="/brand/icon-192.png" id="favIcon">
 <title>فهّمني 🍿</title>
+<script>
+try { var s0 = JSON.parse(localStorage.getItem("mt_settings") || "null");
+  if (s0) { var th = s0.theme === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : s0.theme;
+    document.documentElement.setAttribute("data-theme", th || "dark"); } } catch (e) {}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=Reem+Kufi:wght@600;700&display=swap" rel="stylesheet">
@@ -24,6 +29,19 @@
   --danger:#ff7a6b; --heart:#ff5a6e;
   --sub-size:12px;
 }
+/* الوضع الأبيض */
+html[data-theme=light]{--bg:#f6f3ee;--surface:#ffffff;--surface2:#f1ece4;--line:#e5dccd;--text:#1d170f;--muted:#7b6e5c;--danger:#d64535}
+html[data-theme=light] .tip{background:linear-gradient(135deg,#fff6e3,#ffffff);border-color:#ecd9b0}
+html[data-theme=light] .snap{background:linear-gradient(135deg,#fffbd6,#ffffff);border-color:#ece39a}
+html[data-theme=light] header#topbar.scrolled{background:rgba(246,243,238,.95)}
+html[data-theme=light] .splash{background:radial-gradient(120% 70% at 50% 42%,#fff3dc 0%,var(--bg) 62%)}
+html[data-theme=light] .brand{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 85%,#fff),var(--accent) 50%,color-mix(in srgb,var(--accent) 70%,#000));-webkit-background-clip:text;background-clip:text}
+html[data-theme=light] .sheet .panel{background:#fffffff2}
+html[data-theme=light] .seg button[aria-pressed=true],html[data-theme=light] .go,html[data-theme=light] .btn2{box-shadow:0 2px 10px rgba(160,110,30,.18)}
+html[data-theme=light] .card{box-shadow:0 1px 2px rgba(60,40,10,.04),0 6px 20px rgba(60,40,10,.05)}
+.banner{border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:14px;line-height:1.7;background:var(--surface2);border:1px solid var(--line)}
+.banner.warn{background:rgba(255,122,107,.12);border-color:rgba(255,122,107,.35)}
+.banner.ann{background:linear-gradient(135deg,rgba(224,168,74,.16),transparent);border-color:rgba(224,168,74,.4)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 html{background:var(--bg);overscroll-behavior:none;-webkit-text-size-adjust:100%}
 button,a,.chips button,input{touch-action:manipulation}
@@ -32,7 +50,7 @@ button:active,.ibtn:active,.snap:active,.fav .open:active,.go:active,.btn2:activ
 
 /* الاسم */
 .brand{font-family:"Reem Kufi",sans-serif;font-weight:700;letter-spacing:0;line-height:1.1;
-  background:linear-gradient(180deg,#f6d38b,#e0a84a 55%,#c4862c);-webkit-background-clip:text;background-clip:text;color:transparent}
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 62%,#fff),var(--accent) 55%,color-mix(in srgb,var(--accent) 78%,#000));-webkit-background-clip:text;background-clip:text;color:transparent}
 h1.brand{font-size:30px}
 .brand.small{font-size:20px}
 .brand.xl{font-size:46px;margin-top:14px}
@@ -262,8 +280,8 @@ body.cinema .not-cinema{display:none!important}
 <body>
 <div class="splash" id="splash" aria-hidden="true">
   <div class="logo big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M6 15h4M13 15h5M6 11h8M16 11h2"/></svg></div>
-  <div class="brand xl">فهّمني</div>
-  <div class="tag">نفهّمك أي فلم بلهجتك 🍿</div>
+  <div class="brand xl" data-s="name">فهّمني</div>
+  <div class="tag" data-s="splash">نفهّمك أي فلم بلهجتك 🍿</div>
   <div class="dots"><i></i><i></i><i></i></div>
 </div>
 <div class="wrap">
@@ -272,8 +290,8 @@ body.cinema .not-cinema{display:none!important}
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M6 15h4M13 15h5M6 11h8M16 11h2"/></svg>
     </div>
     <div>
-      <h1 class="brand">فهّمني</h1>
-      <p>أي فلم أو مقطع… نفهّمك إياه بلهجتك 🍿</p>
+      <h1 class="brand" data-s="name">فهّمني</h1>
+      <p data-s="tagline">أي فلم أو مقطع… نفهّمك إياه بلهجتك 🍿</p>
     </div>
   </header>
 
@@ -282,7 +300,7 @@ body.cinema .not-cinema{display:none!important}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
       رجوع
     </button>
-    <span class="brand small">فهّمني</span>
+    <span class="brand small" data-s="name">فهّمني</span>
   </div>
 
   <!-- إرشاد: إضافة الأداة للشاشة الرئيسية -->
@@ -307,11 +325,14 @@ body.cinema .not-cinema{display:none!important}
     <p class="note err hidden" id="pushErr"></p>
   </section>
 
+  <div class="home-only banner warn hidden" id="maintBox"></div>
+  <div class="home-only banner ann hidden" id="annBox"></div>
+
   <form id="form" class="home-only card" autocomplete="off">
-    <label class="t" for="url">رابط الفلم من يوتيوب 🎬</label>
+    <label class="t" for="url" data-t="movie_label">رابط الفلم من يوتيوب 🎬</label>
     <input id="url" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…">
-    <label class="t" for="clipUrl" style="margin-top:12px">رابط المقطع من السوشل 📱</label>
-    <input id="clipUrl" type="url" inputmode="url" placeholder="تيك توك، انستا، أو شورتس يوتيوب">
+    <label class="t social-only" for="clipUrl" style="margin-top:12px" data-t="clip_label">رابط المقطع من السوشل 📱</label>
+    <input class="social-only" id="clipUrl" type="url" inputmode="url" placeholder="تيك توك، انستا، أو شورتس يوتيوب">
     <div class="row">
       <div>
         <label class="t">لغة الفلم</label>
@@ -329,7 +350,7 @@ body.cinema .not-cinema{display:none!important}
         <div class="chips" id="dialects"></div>
       </div>
     </div>
-    <button class="go" id="goBtn" type="submit">ترجم وشغّل 🎬</button>
+    <button class="go" id="goBtn" type="submit" data-t="go_btn">ترجم وشغّل 🎬</button>
     <p class="note err hidden" id="formErr"></p>
   </form>
 
@@ -345,7 +366,7 @@ body.cinema .not-cinema{display:none!important}
 
   <a class="home-only card snap" id="snapBox" href="https://snapchat.com/t/T4QBeB0D" target="_blank" rel="noopener">
     <span class="ghost" aria-hidden="true">👻</span>
-    <span><b>تحتاج مساعدة؟</b><br><small>كلمني على سناب، حياك 🤍</small></span>
+    <span><b data-t="snap_title">تحتاج مساعدة؟</b><br><small data-t="snap_sub">كلمني على سناب، حياك 🤍</small></span>
     <span class="go2" aria-hidden="true">‹</span>
   </a>
 
@@ -417,7 +438,7 @@ body.cinema .not-cinema{display:none!important}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 4.3 2.4h2c.7-1.3 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg>
         <span>حفظ</span>
       </button>
-      <button class="ibtn" id="dialBtn" type="button">تبديل الترجمة 🤹🏻</button>
+      <button class="ibtn" id="dialBtn" type="button" data-t="switch_btn">تبديل الترجمة 🤹🏻</button>
       <button class="ibtn hidden" id="dubBtn" type="button">🎙️ دبلجة</button>
       <span class="spacer"></span>
       <a class="ibtn hidden" id="srtBtn" href="#" aria-label="تحميل الترجمة">
@@ -460,7 +481,33 @@ body.cinema .not-cinema{display:none!important}
   let favs = [], isFav = false, title = "", duration = 0, speed = 1, jobDone = false, aspect = 16 / 9;
   let readyDialects = [], introUntil = 0, lastStage = "";
   let edgeMode = false, doneWins = new Set(), WIN = 120, wasWaiting = false;
-  const CLIP_INTRO = "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨";
+  // ───── إعدادات الأدمن (تنحفظ في الجوال عشان تطبّق فوراً المرة الجاية)
+  let S = store.get("settings", null) || { texts: {} };
+  const T = (k, fb) => (S.texts && S.texts[k]) || fb;
+  const inkFor = hex => { const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#1a1206" : "#ffffff"; };
+  function applySettings(s) {
+    S = s; store.set("settings", s);
+    const th = s.theme === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : (s.theme || "dark");
+    document.documentElement.setAttribute("data-theme", th);
+    document.querySelector('meta[name="theme-color"]').content = th === "light" ? "#f6f3ee" : "#0d0b09";
+    if (/^#[0-9a-f]{6}$/i.test(s.accent || "")) { document.documentElement.style.setProperty("--accent", s.accent); document.documentElement.style.setProperty("--accent-ink", inkFor(s.accent)); }
+    document.querySelectorAll("[data-s]").forEach(el => { if (s[el.dataset.s]) el.textContent = s[el.dataset.s]; });
+    document.querySelectorAll("[data-t]").forEach(el => { const v = s.texts?.[el.dataset.t]; if (v) el.textContent = v; });
+    document.querySelector('meta[name="apple-mobile-web-app-title"]').content = s.name;
+    if (!document.body.classList.contains("watching")) document.title = s.name + " 🍿";
+    const v = s.icon_v || 0;
+    $("#touchIcon").href = "/brand/icon-180.png?v=" + v; $("#favIcon").href = "/brand/icon-192.png?v=" + v;
+    $("#snapBox").href = s.snap_url || $("#snapBox").href;
+    $("#snapBox").classList.toggle("hidden", s.show_snap === false);
+    document.querySelectorAll(".social-only").forEach(el => el.classList.toggle("hidden", s.show_social === false));
+    $("#maintBox").textContent = s.maintenance ? "🛠️ " + s.maintenance_msg : ""; $("#maintBox").classList.toggle("hidden", !s.maintenance);
+    $("#annBox").textContent = s.announcement || ""; $("#annBox").classList.toggle("hidden", !s.announcement);
+    $("#goBtn").disabled = Boolean(s.maintenance);
+    if (store.get("size2", null) == null && s.font_size) { size = s.font_size; applySize(); }
+    if (store.get("dialect", null) == null && s.default_dialect) dialect = s.default_dialect;
+    if (cfg) renderChips();
+  }
+  const CLIP_INTRO_DEFAULT = "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨";
   // نفس الكلام بس للمقاطع: «المقطع» بدل «الفلم»
   const word = t => (job?.kind === "clip" ? String(t).replace(/فلمك/g, "مقطعك").replace(/الفلم/g, "المقطع").replace(/فلم /g, "مقطع ") : t);
 
@@ -471,6 +518,8 @@ body.cinema .not-cinema{display:none!important}
   document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => { $("#" + b.dataset.close).classList.add("hidden"); store.set("hide_" + b.dataset.close, true); });
 
   api("/api/hello", { method: "POST", body: JSON.stringify({ app: standalone, push: pushOn() }) }).catch(() => {});
+  if (S && S.name) setTimeout(() => applySettings(S), 0);
+  fetch("/api/settings").then(r => r.json()).then(s => applySettings(s)).catch(() => {});
   fetch("/api/config").then(r => r.json()).then(c => {
     cfg = c;
     renderChips(); loadFavs().then(openFromUrl);
@@ -487,10 +536,12 @@ body.cinema .not-cinema{display:none!important}
     document.querySelectorAll("#group button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.g === group)));
     $("#dialectBox").classList.toggle("hidden", group !== "dialect");
     $("#dialects").innerHTML = "";
-    for (const [k, d] of Object.entries(cfg.dialects)) if (d.group === "dialect") $("#dialects").append(chip(d.name, k === dialect, () => setDialect(k)));
+    const on = k => !S.dialects_enabled || S.dialects_enabled.includes(k);
+    for (const [k, d] of Object.entries(cfg.dialects)) if (d.group === "dialect" && on(k)) $("#dialects").append(chip(d.name, k === dialect, () => setDialect(k)));
+    document.querySelector('#group [data-g="fusha"]').classList.toggle("hidden", !on("fusha"));
     // داخل المشغّل: كل اللهجات + الفصحى
     $("#sDialects").innerHTML = "";
-    for (const [k, d] of Object.entries(cfg.dialects))
+    for (const [k, d] of Object.entries(cfg.dialects)) if (on(k))
       $("#sDialects").append(chip(d.name + (readyDialects.includes(k) && k !== dialect ? " ⚡" : ""), k === dialect, () => switchDialect(k)));
 
   }
@@ -527,7 +578,7 @@ body.cinema .not-cinema{display:none!important}
       lang = src; dialect = dia; renderChips();
       openJob(d.job_id, d.video_id, resumeAt || 0, /\/shorts\//.test(url) || kind === "clip", d.platform || "youtube", kind, url);
     } catch (err) { showErr(err.message); window.scrollTo({ top: 0, behavior: "smooth" }); }
-    finally { btn.disabled = false; btn.textContent = "ترجم وشغّل 🎬"; }
+    finally { btn.disabled = Boolean(S.maintenance); btn.textContent = T("go_btn", "ترجم وشغّل 🎬"); }
   }
   $("#form").addEventListener("submit", e => {
     e.preventDefault();
@@ -591,10 +642,10 @@ body.cinema .not-cinema{display:none!important}
   function openJob(id, vid, resumeAt, vertHint, platform = "youtube", kind = "movie", url = "") {
     job = { id, vid, platform, kind, url: url || (platform === "youtube" ? "https://youtu.be/" + vid : "") };
     resetSubs(); title = ""; duration = 0; readyDialects = [];
-    $("#dubBtn").classList.toggle("hidden", kind !== "clip");
+    $("#dubBtn").classList.toggle("hidden", kind !== "clip" || S.show_dub === false);
     lastStage = "";
     if (kind === "clip") {
-      introUntil = Date.now() + 3500; $("#stage-text").textContent = CLIP_INTRO; $("#pct").textContent = "";
+      introUntil = Date.now() + 3500; $("#stage-text").textContent = T("clip_intro", CLIP_INTRO_DEFAULT); $("#pct").textContent = "";
       const myJob = job; setTimeout(() => { if (job === myJob && lastStage) $("#stage-text").textContent = lastStage; }, 3600);
     }
     aspect = 0; setAspect(vertHint ? 9 / 16 : 16 / 9);
@@ -677,7 +728,7 @@ body.cinema .not-cinema{display:none!important}
 
   $("#srtBtn").addEventListener("click", async e => {
     e.preventDefault();
-    if (!confirm(`ترا بيتحمل ملف الترجمة باللهجة اللي انت مختارها (${dName(dialect)}) فا تأكد بالاول وش انت ناوي عليه 🚀`)) return;
+    if (!confirm(T("download_confirm", "ترا بيتحمل ملف الترجمة باللهجة اللي انت مختارها ({dialect}) فا تأكد بالاول وش انت ناوي عليه 🚀").replace("{dialect}", dName(dialect)))) return;
     const r = await api(`/api/jobs/${job.id}/srt`);
     const blob = await r.blob(); const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = (title || job.vid) + ".srt"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -738,7 +789,7 @@ body.cinema .not-cinema{display:none!important}
     } catch (err) { setDialect(old); toast(err.message); }
   }
   $("#dialBtn").onclick = () => openSheet();
-  $("#dubBtn").onclick = () => toast("شغالين على الدبلجة واذا صارت متوفرة بنعلمك💬");
+  $("#dubBtn").onclick = () => toast(T("dub_msg", "شغالين على الدبلجة واذا صارت متوفرة بنعلمك💬"));
 
   // ───── المشغّل (يوتيوب مخفي، والأزرار حقتنا)
   const stage = $("#stage");
@@ -941,7 +992,7 @@ body.cinema .not-cinema{display:none!important}
       o.connect(g).connect(actx.destination); o.start(t + d); o.stop(t + d + 1);
     });
   }
-  function readySound() { chime(); toast(word("فلمك جاهز 🍿 يلا نبدأ!")); try { navigator.vibrate?.(60); } catch {} }
+  function readySound() { chime(); toast(word(T("ready_toast", "فلمك جاهز 🍿 يلا نبدأ!"))); try { navigator.vibrate?.(60); } catch {} }
 
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2600); }
 
@@ -977,7 +1028,7 @@ body.cinema .not-cinema{display:none!important}
   }
   function renderFavs() {
     const box = $("#favList"); box.innerHTML = "";
-    if (!favs.length) { box.innerHTML = '<p class="empty">ما عندك أفلام محفوظة للحين. اضغط ❤️ وانت تتفرج ونحفظ لك الفلم ومكانك فيه.</p>'; return; }
+    if (!favs.length) { const p = document.createElement("p"); p.className = "empty"; p.textContent = T("fav_empty", "ما عندك أفلام محفوظة للحين. اضغط ❤️ وانت تتفرج ونحفظ لك الفلم ومكانك فيه."); box.append(p); return; }
     for (const f of favs) {
       const row = document.createElement("div"); row.className = "fav";
       const open = document.createElement("button"); open.type = "button"; open.className = "open";

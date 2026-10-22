@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0d0b09">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>لوحة التحكم</title>
+<link rel="icon" href="/brand/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=Reem+Kufi:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0b09;--surface:#17140f;--surface2:#211c15;--line:#2f2820;--text:#f3ece1;--muted:#a59885;--accent:#e0a84a;--accent-ink:#1a1206;--danger:#ff7a6b;--ok:#7fd49a}
+html[data-theme=light]{--bg:#f6f3ee;--surface:#fff;--surface2:#f1ece4;--line:#e5dccd;--text:#1d170f;--muted:#7b6e5c;--danger:#d64535;--ok:#2e9d55}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font-family:"IBM Plex Sans Arabic",system-ui,sans-serif;min-height:100dvh;padding:max(14px,env(safe-area-inset-top)) 16px calc(170px + env(safe-area-inset-bottom));overscroll-behavior-y:none}
+.wrap{max-width:720px;margin:0 auto}
+.hidden{display:none!important}
+.brand{font-family:"Reem Kufi",sans-serif;font-weight:700;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 62%,#fff),var(--accent) 55%,color-mix(in srgb,var(--accent) 78%,#000));-webkit-background-clip:text;background-clip:text;color:transparent}
+header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+header img{width:44px;height:44px;border-radius:12px;object-fit:cover}
+header h1{margin:0;font-size:24px}
+header p{margin:0;color:var(--muted);font-size:13px}
+header .sp{flex:1}
+.ghost{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:10px;padding:7px 12px;font:inherit;font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h2{margin:0 0 12px;font-size:16px}
+.note{font-size:13px;color:var(--muted);line-height:1.8;margin:6px 0 0}
+label.f{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
+label.f:first-child{margin-top:0}
+input[type=text],input[type=password],input[type=url],input[type=number],textarea{width:100%;font:inherit;font-size:16px;color:var(--text);background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:11px 13px;outline:none}
+textarea{min-height:64px;resize:vertical;line-height:1.7}
+input:focus,textarea:focus{border-color:var(--accent)}
+input[dir=ltr]{text-align:left}
+.btn{font:inherit;font-size:16px;font-weight:700;border:0;border-radius:13px;padding:13px 16px;background:var(--accent);color:var(--accent-ink);width:100%}
+.btn:disabled{opacity:.5}
+.btn.sec{background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+button{transition:transform .3s cubic-bezier(.22,1.6,.36,1),opacity .2s}
+button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
+.err{color:var(--danger);font-size:14px;margin-top:10px}
+.okmsg{color:var(--ok);font-size:14px;margin-top:10px}
+
+/* التبويبات (تحت مثل تطبيقات الآيفون) */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;justify-content:space-around;background:color-mix(in srgb,var(--bg) 94%,transparent);
+  border-top:1px solid var(--line);padding:6px 4px max(8px,env(safe-area-inset-bottom))}
+.tabs button{flex:1;border:0;background:none;color:var(--muted);font:inherit;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0}
+.tabs button span{font-size:20px;line-height:1.2}
+.tabs button[aria-selected=true]{color:var(--accent);font-weight:700}
+.pane{animation:in .35s cubic-bezier(.22,1,.36,1) both}
+@keyframes in{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+
+/* الإحصائيات */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px}
+.stat b{display:block;font-size:28px;font-family:"Reem Kufi",sans-serif;color:var(--accent);line-height:1.2}
+.stat small{color:var(--muted);font-size:12px}
+
+/* اختيارات */
+.seg{display:flex;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;font:inherit;font-size:14px;border:0;border-radius:9px;padding:9px 4px;background:transparent;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .lbl{font-size:15px}
+.row .lbl small{display:block;color:var(--muted);font-size:12px}
+.sw{position:relative;width:52px;height:32px;flex:none}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw i{position:absolute;inset:0;border-radius:99px;background:var(--surface2);border:1px solid var(--line);transition:background .25s}
+.sw i::after{content:"";position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0005;transition:transform .3s cubic-bezier(.22,1.4,.36,1)}
+.sw input:checked+i{background:var(--ok);border-color:var(--ok)}
+.sw input:checked+i::after{transform:translateX(-20px)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface2);color:var(--text);border-radius:999px;padding:7px 13px}
+.chips button[aria-pressed=true]{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:700}
+.colors{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.colors button{width:38px;height:38px;border-radius:50%;border:3px solid transparent}
+.colors button[aria-pressed=true]{border-color:var(--text)}
+.colors input[type=color]{width:44px;height:40px;border:0;background:none;padding:0}
+.iconbox{display:flex;align-items:center;gap:14px}
+.iconbox img{width:84px;height:84px;border-radius:20px;object-fit:cover;border:1px solid var(--line);background:var(--surface2)}
+.num{display:flex;align-items:center;gap:8px}
+.num input{width:90px;text-align:center}
+
+/* زر الحفظ */
+.savebar{position:fixed;left:16px;right:16px;bottom:calc(72px + env(safe-area-inset-bottom));z-index:29;max-width:688px;margin:0 auto;
+  transform:translateY(140%);transition:transform .4s cubic-bezier(.22,1.2,.36,1)}
+.savebar.on{transform:none}
+.savebar .btn{box-shadow:0 10px 30px #0006}
+.toast{position:fixed;top:max(16px,env(safe-area-inset-top));left:50%;transform:translate(-50%,-140%);z-index:50;background:var(--surface);border:1px solid var(--line);
+  color:var(--text);border-radius:999px;padding:10px 18px;font-size:14px;transition:transform .45s cubic-bezier(.22,1.3,.36,1);box-shadow:0 8px 24px #0005;white-space:nowrap}
+.toast.on{transform:translate(-50%,0)}
+
+/* شاشة الدخول */
+.login{max-width:380px;margin:12vh auto 0;text-align:center}
+.login .logo{width:76px;height:76px;border-radius:20px;margin:0 auto 12px;display:block;object-fit:cover}
+.login h1{font-size:34px;margin:0}
+.login p{color:var(--muted);margin:6px 0 22px}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+
+<!-- الدخول -->
+<section class="login" id="loginView">
+  <img class="logo" src="/brand/icon-192.png" alt="">
+  <h1 class="brand">لوحة التحكم</h1>
+  <p>اكتب كلمة سر الأدمن 🔐</p>
+  <form id="loginForm">
+    <input type="password" id="key" placeholder="كلمة السر" autocomplete="current-password" required>
+    <button class="btn" style="margin-top:12px" type="submit">دخول</button>
+    <div class="err hidden" id="loginErr"></div>
+  </form>
+</section>
+
+<div class="wrap hidden" id="app">
+  <header>
+    <img id="hdrIcon" src="/brand/icon-192.png" alt="">
+    <div><h1 class="brand" id="hdrName">لوحة التحكم</h1><p>تحكّم بأداتك كاملة من هنا ✨</p></div>
+    <span class="sp"></span>
+    <a class="ghost" href="/" target="_blank" rel="noopener">فتح الأداة ↗</a>
+  </header>
+
+  <!-- 📊 الإحصائيات -->
+  <section class="pane" data-pane="stats">
+    <div class="grid" id="statsGrid"></div>
+    <p class="note" style="text-align:center;margin-top:12px">بدون أي معلومات شخصية، بس أرقام 🔒 <button class="ghost" type="button" id="refreshStats">تحديث 🔄</button></p>
+  </section>
+
+  <!-- 🎨 الشكل -->
+  <section class="pane hidden" data-pane="look">
+    <div class="card">
+      <h2>الوضع 🌗</h2>
+      <div class="seg" id="themeSeg">
+        <button type="button" data-v="dark">ليلي 🌙</button>
+        <button type="button" data-v="light">أبيض ☀️</button>
+        <button type="button" data-v="auto">حسب الجوال 📱</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>لون الأداة 🎨</h2>
+      <div class="colors" id="colors"></div>
+    </div>
+    <div class="card">
+      <h2>الاسم والوصف ✍️</h2>
+      <label class="f">اسم التطبيق</label>
+      <input type="text" id="s_name" maxlength="30">
+      <label class="f">الوصف تحت الاسم</label>
+      <input type="text" id="s_tagline" maxlength="120">
+      <label class="f">كلام شاشة الافتتاح</label>
+      <input type="text" id="s_splash" maxlength="120">
+      <p class="note">الاسم الجديد يطلع على الشاشة الرئيسية للي يضيفون التطبيق بعد التغيير.</p>
+    </div>
+    <div class="card">
+      <h2>أيقونة التطبيق 🖼️</h2>
+      <div class="iconbox">
+        <img id="iconPreview" src="/brand/icon-512.png" alt="">
+        <div style="flex:1">
+          <button class="btn sec" type="button" id="pickIcon">اختر صورة من الألبوم</button>
+          <button class="btn danger" type="button" id="resetIcon" style="margin-top:8px">رجّع الأيقونة الأصلية</button>
+        </div>
+      </div>
+      <input type="file" id="iconFile" accept="image/*" class="hidden">
+      <p class="note">الأفضل صورة مربعة. نقصّها ونصغّرها تلقائياً.</p>
+    </div>
+  </section>
+
+  <!-- ✍️ النصوص -->
+  <section class="pane hidden" data-pane="texts">
+    <div class="card" id="textsCard">
+      <h2>كل الكلام اللي يطلع للمستخدم ✍️</h2>
+      <p class="note" style="margin:-6px 0 6px">{dialect} = اسم اللهجة، {name} = اسم الفلم.</p>
+    </div>
+  </section>
+
+  <!-- 🔔 الإشعارات -->
+  <section class="pane hidden" data-pane="push">
+    <div class="card">
+      <h2>إشعار لكل المستخدمين 📣</h2>
+      <label class="f">العنوان</label>
+      <input type="text" id="b_title" maxlength="80" placeholder="مثلاً: ميزة جديدة 🎉">
+      <label class="f">النص</label>
+      <textarea id="b_body" maxlength="240" placeholder="اكتب رسالتك…"></textarea>
+      <button class="btn" type="button" id="sendBroadcast" style="margin-top:12px">إرسال 🚀</button>
+      <p class="note">يوصل للي مفعّلين التنبيهات (<b id="pushCount">…</b> جهاز).</p>
+    </div>
+    <div class="card">
+      <h2>إعلان في الصفحة الرئيسية 📌</h2>
+      <textarea id="s_announcement" maxlength="200" placeholder="فاضي = ما يطلع شي"></textarea>
+    </div>
+  </section>
+
+  <!-- ⚙️ الإعدادات -->
+  <section class="pane hidden" data-pane="settings">
+    <div class="card">
+      <h2>الحد اليومي 🧮</h2>
+      <div class="row"><div class="lbl">ترجمات جديدة لكل جهاز<small>تبديل اللهجة ما ينحسب</small></div><div class="num"><input type="number" id="s_daily_per_device" min="1" max="500"></div></div>
+      <div class="row"><div class="lbl">ترجمات جديدة للكل باليوم<small>يحمي الحدود المجانية</small></div><div class="num"><input type="number" id="s_daily_total" min="1" max="5000"></div></div>
+    </div>
+    <div class="card">
+      <h2>اللهجات المتاحة 🗣️</h2>
+      <div class="chips" id="dialChips"></div>
+      <label class="f">اللهجة الافتراضية</label>
+      <div class="chips" id="defChips"></div>
+      <label class="f">حجم خط الترجمة الافتراضي</label>
+      <div class="num"><input type="number" id="s_font_size" min="10" max="30"></div>
+    </div>
+    <div class="card">
+      <h2>الأقسام 🧩</h2>
+      <div class="row"><div class="lbl">خانة مقاطع السوشل 📱</div><label class="sw"><input type="checkbox" id="s_show_social"><i></i></label></div>
+      <div class="row"><div class="lbl">زر الدبلجة 🎙️</div><label class="sw"><input type="checkbox" id="s_show_dub"><i></i></label></div>
+      <div class="row"><div class="lbl">بطاقة سناب 👻</div><label class="sw"><input type="checkbox" id="s_show_snap"><i></i></label></div>
+      <label class="f">رابط سناب</label>
+      <input type="url" id="s_snap_url" dir="ltr">
+    </div>
+    <div class="card">
+      <h2>وضع الصيانة 🛠️</h2>
+      <div class="row"><div class="lbl">إيقاف الترجمات الجديدة مؤقتاً<small>المحفوظ والمترجم من قبل يشتغل عادي</small></div><label class="sw"><input type="checkbox" id="s_maintenance"><i></i></label></div>
+      <label class="f">رسالة الصيانة</label>
+      <input type="text" id="s_maintenance_msg" maxlength="200">
+    </div>
+    <div class="card">
+      <button class="btn danger" type="button" id="resetAll">رجّع كل الإعدادات للأصل</button>
+      <button class="btn sec" type="button" id="logout" style="margin-top:8px">تسجيل خروج</button>
+    </div>
+  </section>
+</div>
+
+<div class="savebar" id="savebar"><button class="btn" type="button" id="saveBtn">حفظ التغييرات ✓</button></div>
+
+<nav class="tabs hidden" id="tabs">
+  <button type="button" data-tab="stats" aria-selected="true"><span>📊</span>الأرقام</button>
+  <button type="button" data-tab="look" aria-selected="false"><span>🎨</span>الشكل</button>
+  <button type="button" data-tab="texts" aria-selected="false"><span>✍️</span>النصوص</button>
+  <button type="button" data-tab="push" aria-selected="false"><span>🔔</span>الإشعارات</button>
+  <button type="button" data-tab="settings" aria-selected="false"><span>⚙️</span>الإعدادات</button>
+</nav>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const ls = { get: k => { try { return localStorage.getItem("mt_" + k); } catch { return null; } },
+               set: (k, v) => { try { localStorage.setItem("mt_" + k, v); } catch {} }, del: k => { try { localStorage.removeItem("mt_" + k); } catch {} } };
+  let key = ls.get("adminKey") || "", S = null, draft = {}, dirty = false;
+  const api = (p, o = {}) => fetch("/api/admin/" + p, { ...o, headers: { "x-admin-key": key, ...(o.body && !(o.body instanceof FormData) ? { "content-type": "application/json" } : {}), ...(o.headers || {}) } });
+  const toast = m => { const t = $("#toast"); t.textContent = m; t.classList.add("on"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2400); };
+
+  const DIALECTS = { fusha: "الفصحى", najdi: "نجدية", hijazi: "حجازية", khaleeji: "خليجية", yemeni: "يمنية", egyptian: "مصرية", shami: "شامية", iraqi: "عراقية" };
+  const COLORS = ["#e0a84a", "#e8735a", "#d9577b", "#9b7be0", "#4f8ff0", "#2fb4a6", "#5cb85c", "#c9a227"];
+  const TEXTS = {
+    movie_label: "عنوان خانة رابط الفلم", clip_label: "عنوان خانة رابط المقطع", go_btn: "زر الترجمة",
+    clip_intro: "أول رسالة لما يترجم مقطع", switch_btn: "زر تبديل الترجمة", dub_msg: "رسالة زر الدبلجة",
+    download_confirm: "تنبيه قبل تحميل الترجمة", ready_toast: "رسالة «جاهز» داخل الأداة", fav_empty: "لما ما فيه محفوظة",
+    snap_title: "عنوان بطاقة سناب", snap_sub: "نص بطاقة سناب",
+    push_ready_title: "عنوان إشعار الفلم الجاهز", push_ready_body: "نص إشعار الفلم الجاهز",
+    push_clip_title: "عنوان إشعار المقطع الجاهز", push_clip_body: "نص إشعار المقطع الجاهز",
+  };
+
+  // ───── الدخول
+  async function login(k) {
+    key = k;
+    const r = await api("login", { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "ما قدرنا ندخل");
+    ls.set("adminKey", k);
+    $("#loginView").classList.add("hidden"); $("#app").classList.remove("hidden"); $("#tabs").classList.remove("hidden");
+    await loadSettings(); loadStats();
+  }
+  $("#loginForm").onsubmit = async e => {
+    e.preventDefault(); $("#loginErr").classList.add("hidden");
+    try { await login($("#key").value.trim()); } catch (err) { $("#loginErr").textContent = err.message; $("#loginErr").classList.remove("hidden"); }
+  };
+  if (key) login(key).catch(() => { ls.del("adminKey"); key = ""; });
+  $("#logout").onclick = () => { ls.del("adminKey"); location.reload(); };
+
+  // ───── التبويبات
+  document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => {
+    document.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+    document.querySelectorAll("[data-pane]").forEach(p => {
+      const on = p.dataset.pane === b.dataset.tab;
+      p.classList.toggle("hidden", !on);
+      if (on) { p.classList.remove("pane"); void p.offsetWidth; p.classList.add("pane"); }
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (b.dataset.tab === "stats") loadStats();
+  });
+
+  // ───── الأرقام
+  async function loadStats() {
+    const g = $("#statsGrid");
+    if (!g.children.length) g.innerHTML = '<div class="stat"><b>…</b><small>نحسب…</small></div>';
+    const r = await api("stats"); const d = await r.json();
+    if (!r.ok) return toast(d.error || "ما قدرنا نجيب الأرقام");
+    const items = [
+      [d.users, "مستخدم 👥"], [d.today, "دخلوا اليوم 🔥"], [d.active7, "نشيطين هالأسبوع 📅"], [d.app, "ثبّتوا التطبيق 📲"],
+      [d.withPush, "مفعّلين الإشعارات 🔔"], [d.newToday, "ترجمات جديدة اليوم 🆕"], [d.translations, "ترجمة محفوظة 🎬"], [d.clips, "منها مقاطع سوشل 📱"],
+      [d.storageMB + " MB", "المساحة المستخدمة 💾 من ١٠٠٠٠"],
+    ];
+    g.innerHTML = "";
+    for (const [n, l] of items) { const c = document.createElement("div"); c.className = "stat"; const b = document.createElement("b"); b.textContent = n; const s = document.createElement("small"); s.textContent = l; c.append(b, s); g.append(c); }
+    $("#pushCount").textContent = d.withPush;
+  }
+  $("#refreshStats").onclick = loadStats;
+
+  // ───── الإعدادات
+  async function loadSettings() {
+    const r = await api("settings"); S = await r.json();
+    draft = {}; dirty = false; render(); applyTheme(S.theme, S.accent);
+  }
+  function set(k, v) { draft[k] = v; dirty = true; $("#savebar").classList.add("on"); }
+  const val = k => (k in draft ? draft[k] : S[k]);
+  function applyTheme(th, accent) {
+    const t = th === "auto" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : th;
+    document.documentElement.setAttribute("data-theme", t);
+    document.documentElement.style.setProperty("--accent", accent);
+  }
+  function chip(text, on, fn) { const b = document.createElement("button"); b.type = "button"; b.textContent = text; b.setAttribute("aria-pressed", String(on)); b.onclick = fn; return b; }
+
+  function render() {
+    $("#hdrIcon").src = "/brand/icon-192.png?v=" + (S.icon_v || 0);
+    $("#iconPreview").src = "/brand/icon-512.png?v=" + (S.icon_v || 0);
+    // الوضع
+    document.querySelectorAll("#themeSeg button").forEach(b => {
+      b.setAttribute("aria-pressed", String(b.dataset.v === val("theme")));
+      b.onclick = () => { set("theme", b.dataset.v); applyTheme(b.dataset.v, val("accent")); render(); };
+    });
+    // اللون
+    const cbox = $("#colors"); cbox.innerHTML = "";
+    for (const c of COLORS) { const b = document.createElement("button"); b.type = "button"; b.style.background = c; b.setAttribute("aria-pressed", String(c === val("accent"))); b.setAttribute("aria-label", c);
+      b.onclick = () => { set("accent", c); applyTheme(val("theme"), c); render(); }; cbox.append(b); }
+    const pick = document.createElement("input"); pick.type = "color"; pick.value = val("accent");
+    pick.oninput = () => { set("accent", pick.value); applyTheme(val("theme"), pick.value); }; cbox.append(pick);
+    // حقول نصية وأرقام ومفاتيح
+    for (const k of ["name", "tagline", "splash", "announcement", "snap_url", "maintenance_msg", "daily_per_device", "daily_total", "font_size"]) {
+      const el = $("#s_" + k); el.value = val(k) ?? ""; el.oninput = () => set(k, el.type === "number" ? +el.value : el.value);
+    }
+    for (const k of ["show_social", "show_dub", "show_snap", "maintenance"]) { const el = $("#s_" + k); el.checked = Boolean(val(k)); el.onchange = () => set(k, el.checked); }
+    // اللهجات
+    const en = val("dialects_enabled");
+    $("#dialChips").innerHTML = ""; $("#defChips").innerHTML = "";
+    for (const [k, n] of Object.entries(DIALECTS)) {
+      $("#dialChips").append(chip(n, en.includes(k), () => {
+        const next = en.includes(k) ? en.filter(x => x !== k) : [...en, k];
+        if (!next.length) return toast("لازم لهجة وحدة على الأقل 😅");
+        set("dialects_enabled", next); render();
+      }));
+      if (en.includes(k)) $("#defChips").append(chip(n, k === val("default_dialect"), () => { set("default_dialect", k); render(); }));
+    }
+    // النصوص
+    const card = $("#textsCard"); card.querySelectorAll(".tx").forEach(x => x.remove());
+    const texts = { ...S.texts, ...(draft.texts || {}) };
+    for (const [k, label] of Object.entries(TEXTS)) {
+      const wrap = document.createElement("div"); wrap.className = "tx";
+      const l = document.createElement("label"); l.className = "f"; l.textContent = label;
+      const t = document.createElement("textarea"); t.value = texts[k] || ""; t.rows = 2;
+      t.oninput = () => set("texts", { ...(draft.texts || {}), [k]: t.value });
+      wrap.append(l, t); card.append(wrap);
+    }
+  }
+
+  $("#saveBtn").onclick = async () => {
+    const btn = $("#saveBtn"); btn.disabled = true; btn.textContent = "نحفظ…";
+    try {
+      const r = await api("settings", { method: "POST", body: JSON.stringify(draft) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      S = d.settings; draft = {}; dirty = false; $("#savebar").classList.remove("on"); render();
+      toast("انحفظ ✓ التغييرات صارت في الأداة");
+    } catch (err) { toast(err.message || "ما انحفظ 😕"); }
+    finally { btn.disabled = false; btn.textContent = "حفظ التغييرات ✓"; }
+  };
+  $("#resetAll").onclick = async () => {
+    if (!confirm("أكيد ترجّع كل الإعدادات والنصوص للأصل؟")) return;
+    const r = await api("reset", { method: "POST" }); const d = await r.json();
+    if (r.ok) { S = d.settings; draft = {}; dirty = false; $("#savebar").classList.remove("on"); render(); applyTheme(S.theme, S.accent); toast("رجعت للأصل ✓"); }
+  };
+  window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+  // ───── الأيقونة: نقصّها مربعة ونصغّرها هنا قبل الرفع
+  $("#pickIcon").onclick = () => $("#iconFile").click();
+  $("#iconFile").onchange = async () => {
+    const f = $("#iconFile").files[0]; if (!f) return;
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(f); });
+      const side = Math.min(img.width, img.height), sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+      const form = new FormData();
+      for (const size of [180, 192, 512]) {
+        const c = document.createElement("canvas"); c.width = c.height = size;
+        const ctx = c.getContext("2d"); ctx.imageSmoothingQuality = "high"; ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        form.append(String(size), await new Promise(r => c.toBlob(r, "image/png")), `icon-${size}.png`);
+      }
+      toast("نرفع الأيقونة…");
+      const r = await api("icon", { method: "POST", body: form }); const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      S.icon_v = d.icon_v; render(); toast("تغيّرت الأيقونة ✓");
+    } catch (err) { toast(err?.message || "ما قدرنا نقرأ الصورة 😕"); }
+    $("#iconFile").value = "";
+  };
+  $("#resetIcon").onclick = async () => {
+    if (!confirm("ترجّع الأيقونة الأصلية؟")) return;
+    const r = await api("icon-reset", { method: "POST" });
+    if (r.ok) { S.icon_v = (S.icon_v || 0) + 1; render(); toast("رجعت الأيقونة الأصلية ✓"); }
+  };
+
+  // ───── إشعار للكل
+  $("#sendBroadcast").onclick = async () => {
+    const title = $("#b_title").value.trim(), body = $("#b_body").value.trim();
+    if (!title || !body) return toast("اكتب العنوان والنص ✍️");
+    if (!confirm(`نرسل «${title}» لكل المستخدمين المفعّلين للتنبيهات؟`)) return;
+    const r = await api("broadcast", { method: "POST", body: JSON.stringify({ title, body }) }); const d = await r.json();
+    if (!r.ok) return toast(d.error || "ما انرسل 😕");
+    toast(`انرسل لـ ${d.devices} جهاز 🚀`); $("#b_title").value = ""; $("#b_body").value = "";
+  };
+})();
+</script>
+</body>
+</html>

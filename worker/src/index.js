@@ -12,6 +12,7 @@
 
 import { getVapid, saveSub, removeSub, notifyAll, validSubscription } from "./push.js";
 import { WINDOW, systemPrompt, translateLines } from "./edge.js";
+import { adminApi, getSettings, publicSettings, serveIcon, serveManifest } from "./admin.js";
 
 const LANGS = { auto: "تلقائي", en: "الإنجليزية", de: "الألمانية", fr: "الفرنسية" };
 const DIALECTS = {
@@ -186,8 +187,8 @@ const noDevice = () => json({ error: "حدّث الصفحة وجرّب مرة ث
 
 // حد يومي عشان ما تنتهي الحدود المجانية لو انتشر الرابط
 async function checkLimit(env, dev) {
-  const perDevice = parseInt(env.DAILY_PER_DEVICE || "8", 10);
-  const all = parseInt(env.DAILY_TOTAL || "30", 10);
+  const st = await getSettings(env);
+  const perDevice = st.daily_per_device, all = st.daily_total;
   const key = `limits/${new Date().toISOString().slice(0, 10)}.json`;
   const l = (await getJSON(env, key)) || { total: 0, devices: {} };
   if ((l.devices[dev] || 0) >= perDevice) return `وصلت حدك اليوم (${perDevice} ترجمات جديدة) 😅 ارجع بكرة، واللي مترجم من قبل يفتح عادي`;
@@ -203,6 +204,8 @@ async function createJob(request, env) {
     return json({ error: "الأداة ناقصها إعدادات 🛠️" }, 503);
   const dev = deviceOf(request);
   if (!dev) return noDevice();
+  const st = await getSettings(env);
+  if (st.maintenance) return json({ error: st.maintenance_msg }, 503);
   let body;
   try {
     body = JSON.parse((await request.text()).slice(0, 10000) || "{}");
@@ -218,6 +221,8 @@ async function createJob(request, env) {
   const vid = media.vid, shortsHint = media.shorts || media.platform !== "youtube";
   const meta = { platform: media.platform, kind, media_url: media.url };
   if (!(source in LANGS) || !(dialect in DIALECTS)) return json({ error: "اختيار اللغة أو اللهجة غير صحيح." }, 400);
+  if (!st.dialects_enabled.includes(dialect)) return json({ error: "هاللهجة موقفة حالياً 🙏 اختر لهجة ثانية" }, 400);
+  if (kind === "clip" && !st.show_social) return json({ error: "خانة المقاطع موقفة حالياً 🙏" }, 400);
 
   // ترجمة جاهزة من قبل؟
   const cached = await env.BUCKET.head(subsKey(vid, source, dialect));
@@ -360,12 +365,13 @@ async function ingest(request, env, id, ctx) {
     job.notified = true;
     await putJSON(env, jobKey(id), job);
     const clip = job.kind === "clip";
+    const T = (await getSettings(env)).texts;
     const name = job.title ? `«${job.title.slice(0, 60)}»` : (clip ? "مقطعك" : "فلمك");
     const msg = job.status === "error"
       ? { title: clip ? "صار شي بالمقطع 😕" : "صار شي بالفلم 😕", body: `${name} ما ضبط معنا، افتح الأداة وشوف وش السالفة`, url: `/?job=${id}` }
       : clip
-        ? { title: "مقطعك جاهز 👀", body: `${name} صار مفهوم بلهجتك، تعال شوف وش ينقال 👨🏻‍🎨`, url: `/?job=${id}` }
-        : { title: "فلمك جاهز 🍿", body: `${name} صار جاهز بالترجمة، يلا نبدأ؟ 🎬`, url: `/?job=${id}` };
+        ? { title: T.push_clip_title, body: T.push_clip_body.replace("{name}", name), url: `/?job=${id}` }
+        : { title: T.push_ready_title, body: T.push_ready_body.replace("{name}", name), url: `/?job=${id}` };
     const origin = new URL(request.url).origin;
     ctx.waitUntil(notifyAll(env, msg, origin, job.owners || []).catch((e) => console.log("notify", e)));
   }
@@ -644,7 +650,12 @@ export default {
       m = path.match(/^\/api\/edge\/([a-f0-9]{12})$/);
       if (m && request.method === "POST") return edgeStep(request, env, m[1], ctx);
       if (path === "/api/hello" && request.method === "POST") return hello(request, env);
-      if (path === "/api/admin/stats" && request.method === "GET") return adminStats(request, env);
+      if (path === "/api/settings" && request.method === "GET") return json(publicSettings(await getSettings(env)));
+      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast)$/);
+      if (m) return adminApi(request, env, ctx, m[1], safeEqual);
+      m = path.match(/^\/brand\/icon-(180|192|512)\.png$/);
+      if (m) return serveIcon(request, env, m[1]);
+      if (path === "/app.webmanifest") return serveManifest(env);
       m = path.match(/^\/api\/subs\/([a-f0-9]{12})\/([a-z]+)$/);
       if (m && request.method === "POST") return ingestDialect(request, env, m[1], m[2]);
       m = path.match(/^\/api\/media\/([a-f0-9]{12})$/);
