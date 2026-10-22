@@ -77,9 +77,9 @@ h1.brand{font-size:30px}
 /* شاشة الافتتاح */
 .splash{position:fixed;inset:0;z-index:100;background:radial-gradient(120% 70% at 50% 42%,color-mix(in srgb,var(--bg) 82%,var(--accent)) 0%,var(--bg) 62%);
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:6vh;
-  transition:opacity .55s cubic-bezier(.4,0,.2,1),transform .55s cubic-bezier(.4,0,.2,1),visibility .55s;will-change:opacity,transform}
+  transition:opacity 1.4s cubic-bezier(.4,0,.2,1),transform 1.6s cubic-bezier(.22,1,.36,1),visibility 1.4s;will-change:opacity,transform}
 .splash.out{opacity:0;visibility:hidden;transform:scale(1.08)}
-.splash.skip{transition:opacity 1s cubic-bezier(.4,0,.2,1),transform 1.2s cubic-bezier(.22,1,.36,1),visibility 1s;transform:scale(1.12)}
+.splash.skip{transition:opacity 1.6s cubic-bezier(.4,0,.2,1),transform 1.9s cubic-bezier(.22,1,.36,1),visibility 1.6s;transform:scale(1.1)}
 .splash .spvid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s ease;pointer-events:none;z-index:0}
 .splash.hasvid::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(90% 60% at 50% 45%,#0000 0%,#0008 100%)}
 .splash>*:not(.spvid){position:relative;z-index:1}
@@ -407,7 +407,7 @@ html[data-theme=light] .amb{opacity:0!important}
 .tabbar{touch-action:none}
 .tabbar .pill{position:absolute;z-index:0;top:8px;bottom:8px;left:0;width:var(--w,0px);border-radius:22px;pointer-events:none;
   transform:translateX(var(--x,0px)) scale(1);background:color-mix(in srgb,var(--text) 11%,transparent);
-  transition:transform .6s cubic-bezier(.25,1.45,.45,1),width .45s cubic-bezier(.25,1.2,.45,1),background .35s,box-shadow .35s,backdrop-filter .35s}
+  transition:transform .85s cubic-bezier(.25,1.3,.45,1),width .6s cubic-bezier(.25,1.15,.45,1),background .5s,box-shadow .5s,backdrop-filter .5s}
 .tabbar.lift .pill{transform:translateX(var(--x,0px)) scale(1.16,1.3);background:color-mix(in srgb,var(--text) 6%,transparent);
   -webkit-backdrop-filter:blur(1.5px) saturate(1.9) brightness(1.18);backdrop-filter:blur(1.5px) saturate(1.9) brightness(1.18);
   box-shadow:inset 0 0 0 1px #ffffff55,inset 3px 0 7px #ff5a7a55,inset -3px 0 7px #4fb4ff55,inset 0 2px 6px #ffffff40,0 10px 26px #0006;
@@ -416,8 +416,8 @@ html[data-theme=light] .amb{opacity:0!important}
 html[data-theme=light] .tabbar.lift .pill{box-shadow:inset 0 0 0 1px #0000001f,inset 3px 0 7px #ff5a7a40,inset -3px 0 7px #4fb4ff40,0 10px 24px #0002}
 .tabbar button.plus svg{color:var(--accent)}
 body.watching .tabbar{display:none}
-::view-transition-old(root){animation:vtOut .22s cubic-bezier(.4,0,1,1) both}
-::view-transition-new(root){animation:vtIn .38s cubic-bezier(.22,1,.36,1) both}
+::view-transition-old(root){animation:vtOut .45s cubic-bezier(.4,0,.6,1) both}
+::view-transition-new(root){animation:vtIn .75s cubic-bezier(.22,1,.36,1) .08s both}
 @keyframes vtOut{to{opacity:0;transform:scale(.985)}}
 @keyframes vtIn{from{opacity:0;transform:translateY(10px)}}
 .tabbar{view-transition-name:tabbar}
@@ -425,8 +425,8 @@ body.watching .tabbar{display:none}
 ::view-transition-old(tabbar){display:none}
 ::view-transition-new(tabbar){animation:none}
 ::view-transition-group(tabbar){animation:none}
-.wrap.pane-out{opacity:0;transition:opacity .14s ease}
-.pane-in{animation:vtIn .38s cubic-bezier(.22,1,.36,1) both}
+.wrap.pane-out{opacity:0;transition:opacity .3s ease}
+.pane-in{animation:vtIn .75s cubic-bezier(.22,1,.36,1) both}
 </style>
 </head>
 <body data-hp="home">
@@ -1168,7 +1168,7 @@ body.watching .tabbar{display:none}
     } else v.play?.().catch(() => {});
     // نهاية الافتتاحية: الصوت ينزل تدريجياً بدل ما ينقطع
     let fading = false;
-    window.__fadeSplashAudio = (ms = 900) => {
+    window.__fadeSplashAudio = (ms = 1500) => {
       if (fading) return; fading = true;
       // بعد ما تختفي الافتتاحية نوقف الفيديو كامل (يوفّر البطارية)
       setTimeout(() => { v.pause(); v.removeAttribute("src"); v.load(); try { ac?.close?.(); } catch {} }, want && !v.muted ? ms + 150 : 700);
@@ -1191,7 +1191,7 @@ body.watching .tabbar{display:none}
       if (window.__splashSoundPending) return;
       if (performance.now() - (window.__splashUnmutedAt || -1e9) < 600) return;   // نفس اللمسة اللي شغّلت الصوت
       if (performance.now() - t0 < 350) return;
-      sp.classList.add("skip"); window.__fadeSplashAudio?.(1000);
+      sp.classList.add("skip"); window.__fadeSplashAudio?.(1700);
       requestAnimationFrame(closeSplash);
       document.removeEventListener("pointerup", skip, true);
     };
@@ -1204,7 +1204,7 @@ body.watching .tabbar{display:none}
     const tryClose = () => { if (pageLoaded && videoEnded) closeSplash(); };
     window.addEventListener("load", () => { pageLoaded = true; tryClose(); }, { once: true });
     sv.addEventListener("loadedmetadata", () => { gotMeta = true; }, { once: true });
-    sv.addEventListener("timeupdate", () => { if (isFinite(sv.duration) && sv.currentTime >= sv.duration - 0.9) { videoEnded = true; tryClose(); } });
+    sv.addEventListener("timeupdate", () => { if (isFinite(sv.duration) && sv.currentTime >= sv.duration - 1.5) { videoEnded = true; tryClose(); } });
     sv.addEventListener("ended", () => { videoEnded = true; tryClose(); }, { once: true });
     sv.addEventListener("error", () => { videoEnded = true; tryClose(); }, { once: true });
     setTimeout(() => { if (!gotMeta) { videoEnded = true; tryClose(); } }, 4000);   // الفيديو ما اشتغل: نكمل عادي
@@ -1660,7 +1660,7 @@ body.watching .tabbar{display:none}
     if (document.startViewTransition && !reduceMotion) { try { document.startViewTransition(change); return; } catch {} }
     const w = document.querySelector(".wrap");
     w.classList.add("pane-out");
-    setTimeout(() => { change(); w.classList.remove("pane-out"); animate(w, "pane-in"); }, 140);
+    setTimeout(() => { change(); w.classList.remove("pane-out"); animate(w, "pane-in"); }, 300);
   }
   function setHP(p) {
     document.querySelectorAll("#tabbar button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.hp === p)));
