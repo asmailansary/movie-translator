@@ -38,9 +38,10 @@ jobs:
           CALLBACK: ${{ inputs.callback }}
           INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
         run: |
-          curl -sS -m 20 -X POST "$CALLBACK/api/ingest/$JOB_ID" \
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 20 -X POST "$CALLBACK/api/ingest/$JOB_ID" \
             -H "Content-Type: application/json" -H "X-Ingest-Secret: $INGEST_SECRET" \
-            -d '{"status":"running","stage":"GitHub بدأ… يجهّز الأدوات","progress":0.02}' || true
+            -d '{"status":"running","stage":"GitHub بدأ… يجهّز الأدوات","progress":0.02}' || true)
+          echo "::notice::start report HTTP $CODE"
 
       - uses: actions/checkout@v4
 
@@ -62,28 +63,33 @@ jobs:
         timeout-minutes: 5
         run: pip install -q -U "yt-dlp[default]" "urllib3[socks]"
 
-      # يوتيوب يمنع عناوين GitHub؛ WARP يخلي طلبات يوتيوب تطلع من Cloudflare
-      # (وضع proxy: يمر منه يوتيوب بس، وباقي اتصالات GitHub تبقى عادية)
+      # يوتيوب يمنع عناوين GitHub أحياناً؛ WARP يخلي طلبات يوتيوب تطلع من Cloudflare
+      # (wgcf + wireproxy: برامج جاهزة بدون apt، تشتغل في ثواني، ويمر منها يوتيوب بس)
       - name: تشغيل Cloudflare WARP
-        timeout-minutes: 4
+        timeout-minutes: 3
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list >/dev/null
-          sudo apt-get update -qq -o Dir::Etc::sourcelist="sources.list.d/cloudflare-client.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
-          sudo apt-get install -y -qq --no-install-recommends cloudflare-warp
-          sudo systemctl start warp-svc || true
-          for i in $(seq 1 10); do warp-cli --accept-tos status >/dev/null 2>&1 && break; sleep 1; done
-          warp-cli --accept-tos registration new
-          warp-cli --accept-tos mode proxy
-          warp-cli --accept-tos connect
-          for i in $(seq 1 20); do warp-cli --accept-tos status | grep -q Connected && break; sleep 2; done
-          if curl -s -m 15 -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
-            echo "YTDLP_PROXY=socks5://127.0.0.1:40000" >> "$GITHUB_ENV"
-            echo "✓ WARP شغّال"
-          else
-            echo "::warning::WARP ما اشتغل، بنحمّل مباشرة"
-          fi
+          set -e
+          cd /tmp
+          gh release download -R ViRb3/wgcf --pattern '*linux_amd64' -O wgcf --clobber
+          gh release download -R whyvl/wireproxy --pattern '*linux_amd64.tar.gz' -O wp.tgz --clobber
+          tar xzf wp.tgz wireproxy
+          chmod +x wgcf wireproxy
+          yes | ./wgcf register --accept-tos >/dev/null
+          ./wgcf generate >/dev/null
+          printf 'WGConfig = /tmp/wgcf-profile.conf\n\n[Socks5]\nBindAddress = 127.0.0.1:40000\n' > wp.conf
+          nohup ./wireproxy -c wp.conf > wp.log 2>&1 &
+          for i in $(seq 1 20); do
+            if curl -s -m 5 -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+              echo "YTDLP_PROXY=socks5://127.0.0.1:40000" >> "$GITHUB_ENV"
+              echo "::notice::WARP شغّال"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::warning::WARP ما اشتغل: $(tail -3 wp.log | tr '\n' ' ')"
 
       - name: تحميل وتفريغ وترجمة
         # المدخلات تمر كمتغيرات بيئة (مو داخل السكربت) عشان الأمان
