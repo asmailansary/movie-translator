@@ -30,6 +30,10 @@ on:
         required: false
         default: ""
         type: string
+      kind:
+        required: false
+        default: movie
+        type: string
 
 permissions:
   contents: read
@@ -119,4 +123,5 @@ jobs:
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           REUSE: ${{ inputs.reuse }}
           MEDIA_URL: ${{ inputs.media_url }}
+          KIND: ${{ inputs.kind }}
         run: python pipeline/translate.py

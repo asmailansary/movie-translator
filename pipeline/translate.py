@@ -42,7 +42,7 @@ CALLBACK = os.environ.get("CALLBACK", "").strip().rstrip("/")
 INGEST_SECRET = os.environ.get("INGEST_SECRET", "").strip()
 REUSE = os.environ.get("REUSE", "0").strip() == "1"   # الكلام الأصلي جاهز من قبل: نترجم بس
 MEDIA_URL = os.environ.get("MEDIA_URL", "").strip()   # مقطع تيك توك/انستا (غير يوتيوب)
-BG_ORDER = ["najdi", "fusha", "hijazi", "khaleeji", "yemeni", "egyptian", "shami", "iraqi"]
+BG_ORDER = ["najdi", "fusha", "hijazi", "yemeni", "egyptian", "iraqi"]
 
 # Groq يرفض الطلبات اللي توقيعها Python-urllib (خطأ 1010)، فنعرّف نفسنا باسم واضح
 UA = "movie-translator/1.0 (+https://github.com/asmailansary/movie-translator)"
@@ -58,55 +58,47 @@ SOURCE_LANGS = {
     "fr": {"name": "الفرنسية", "code": "fr"},
 }
 
-DIALECTS = {
-    "fusha": {
-        "name": "الفصحى",
-        "group": "fusha",
-        "guide": "العربية الفصحى المعاصرة البسيطة كما في ترجمات الأفلام الاحترافية.",
-    },
-    "najdi": {
-        "name": "نجدية",
-        "group": "dialect",
-        "guide": (
-            "اللهجة النجدية (لهجة أهل الرياض والقصيم ونجد) كما يتكلمها الناس فعلاً. "
-            "استخدم مفرداتها وتراكيبها الطبيعية مثل: وش، ليه، وشلون، ذحين/الحين، أبي/أبغى، "
-            "مب/ما، زين، يا رجّال، ترى، هاه، ودّي، أبد، مرة (بمعنى جداً)، عاد، يالله، "
-            "واجد (باعتدال)، تكفى، أبشر، خلاص، وين، منهو، هذولا، ذاك/ذيك. "
-            "صيغ الأفعال النجدية: يبي، ما يبي، بيروح، قاعد يسوي، رحت، جيت. "
-            "لا تكثر من الكلمات لدرجة التصنّع، خلّها طبيعية وعفوية مثل كلام شخص من الرياض."
-        ),
-    },
-    "hijazi": {
-        "name": "حجازية",
-        "group": "dialect",
-        "guide": "اللهجة الحجازية (جدة ومكة) الطبيعية: إيش، ليش، كدا، دحين، أبغى، مرة، يا شيخ، برضو، إيوه.",
-    },
-    "khaleeji": {
-        "name": "خليجية",
-        "group": "dialect",
-        "guide": "اللهجة الخليجية العامة (كويت/إمارات/قطر/البحرين): شنو، ليش، شلون، الحين، أبي، وايد، زين، چذي.",
-    },
-    "yemeni": {
-        "name": "يمنية",
-        "group": "dialect",
-        "guide": "اللهجة اليمنية (صنعانية مفهومة): ايش، ليش، كيف، ذلحين، اشتي، قده، يا خبير، مَه، شوف.",
-    },
-    "egyptian": {
-        "name": "مصرية",
-        "group": "dialect",
-        "guide": "اللهجة المصرية القاهرية: إيه، ليه، إزاي، دلوقتي، عايز، أوي، كده، يا عم، طب، خلاص.",
-    },
-    "shami": {
-        "name": "شامية",
-        "group": "dialect",
-        "guide": "اللهجة الشامية (سوريا/لبنان/فلسطين/الأردن): شو، ليش، كيف، هلق، بدّي، كتير، هيك، يا زلمة، منيح.",
-    },
-    "iraqi": {
-        "name": "عراقية",
-        "group": "dialect",
-        "guide": "اللهجة العراقية البغدادية: شنو، ليش، شلون، هسه، أريد، كلش، هيچ، ماكو، اكو.",
-    },
-}
+def _load_dialects():
+    """نفس ملف اللهجات اللي يستخدمه Cloudflare (worker/src/dialects.js) عشان أي تحسين يصير بالمكانين"""
+    path = Path(__file__).resolve().parent.parent / "worker" / "src" / "dialects.js"
+    text = path.read_text(encoding="utf-8").split("export default", 1)[1].strip().rstrip(";")
+    return json.loads(text)
+
+
+DIALECTS = _load_dialects()
+KIND = os.environ.get("KIND", "movie").strip() or "movie"
+if KIND not in ("movie", "clip", "song"):
+    KIND = "movie"
+
+FUSHA_MARKERS = ["سوف", "لن", "لم", "ليس", "ليست", "لست", "لسنا", "ماذا", "لماذا", "هكذا", "الان", "جدا", "ذلك", "تلك",
+                 "هؤلاء", "اولئك", "الذي", "التي", "الذين", "ايضا", "حسنا", "انني", "لكنني", "ينبغي", "هل"]
+_TASHKEEL = re.compile(r"[\u064B-\u0652\u0640]")
+_SPLIT = re.compile(r"[^\u0621-\u064A\u06A4\u06AF\u0686]+")
+_SA = re.compile(r"^سا[\u0621-\u064A]{2,}")
+_SA_OK = re.compile(r"^(ساع|سال|سام|ساك|ساب|سار|سافر|ساعد)")
+
+
+def _norm(t):
+    t = _TASHKEEL.sub("", str(t or ""))
+    return t.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا").replace("ى", "ي")
+
+
+def leaks(dialect, text):
+    """كلمات فصحى أو من لهجة ثانية طلعت في سطر مترجم"""
+    d = DIALECTS.get(dialect)
+    if not d or d["group"] == "fusha":
+        return []
+    ws = [w for w in _SPLIT.split(_norm(text)) if w]
+    st = set(ws)
+    allowed = {"الذي"} if dialect == "yemeni" else set()
+    out = [m for m in FUSHA_MARKERS if m not in allowed and _norm(m) in st]
+    for w in ws:
+        if _SA.match(w) and len(w) > 3 and not _SA_OK.match(w):
+            out.append(w)
+            break
+    out += [a for a in d.get("avoid", []) if _norm(a) in st]
+    return list(dict.fromkeys(out))
+
 
 YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
@@ -369,23 +361,42 @@ def split_long_segments(segs, max_len=7.0):
 
 
 # ───────────────────────── 3) الترجمة (Gemini / Groq / Claude) ─────────────────────────
-def build_system_prompt(dialect_key, title):
-    d = DIALECTS[dialect_key]
-    return (
-        "أنت مترجم ترجمة أفلام (Subtitles) محترف. تترجم حوار الفلم إلى العربية.\n"
-        f"اللغة/اللهجة المطلوبة: {d['name']}.\n"
-        f"وصف اللهجة: {d['guide']}\n"
-        f"عنوان الفلم: {title or 'غير معروف'}\n\n"
-        "القواعد:\n"
-        "- ترجم المعنى والإحساس، مو ترجمة حرفية. خلّ الكلام طبيعي كأن الممثل يتكلم بهذي اللهجة.\n"
-        "- الجملة قصيرة وتنقرأ بسرعة على الشاشة.\n"
-        "- أسماء الأشخاص والأماكن تكتبها بالحروف العربية.\n"
-        "- الشتائم والكلام البذيء خفّفه بشكل مناسب.\n"
-        "- إذا كان النص أصوات أو موسيقى أو كلام غير مفهوم، رجّع نص فاضي \"\".\n"
-        "- لا تدمج الجمل ولا تقسمها: كل رقم i له ترجمة وحدة بالضبط.\n"
-        "- رجّع JSON فقط بهذا الشكل بدون أي كلام ثاني: "
-        '[{"i": 0, "ar": "..."}, {"i": 1, "ar": "..."}]'
-    )
+KIND_NOTE = {
+    "movie": "هذا حوار فلم.",
+    "clip": "هذا مقطع قصير من السوشل ميديا: الكلام عفوي وسريع، خلّ الترجمة خفيفة وعفوية.",
+    "song": "هذي أغنية: ترجم الكلمات اللي تنسمع بإحساسها وعاطفتها بنفس اللهجة، جمل قصيرة فيها شاعرية بدون فصحى، ولا تشرح ولا تضيف كلام من عندك.",
+}
+
+
+def build_system_prompt(dialect_key, title, kind=None):
+    d = DIALECTS.get(dialect_key) or DIALECTS["najdi"]
+    fusha = d["group"] == "fusha"
+    lines = [
+        "أنت مترجم ترجمة أفلام (Subtitles) محترف، وابن البلد نفسه، تترجم للعربية.",
+        f"المطلوب: {'الفصحى' if fusha else 'اللهجة ' + d['name']} {'' if fusha else '١٠٠٪، كأن اللي يتكلم واحد من أهلها'}.",
+        f"مين يتكلم: {d['who']}",
+        KIND_NOTE.get(kind or KIND, KIND_NOTE["movie"]),
+        f"العنوان: {title or 'غير معروف'}",
+    ]
+    if d["words"]:
+        lines += ["", "قاموس اللهجة:"] + [f"- بدل «{a}» قل: {b}" for a, b in d["words"]]
+    lines += ["", "قواعد اللهجة:"] + ["- " + g for g in d["grammar"]]
+    if not fusha:
+        lines += ["", "ممنوع نهائياً:",
+                  "- أي كلمة فصحى مثل: سوف، سـ قبل الفعل، لن، لم، ليس، ماذا، لماذا، هكذا، الآن، جداً، ذلك، تلك، هؤلاء، الذي، التي، أيضاً، حسناً، ينبغي، هل.",
+                  "- الإعراب والتنوين والمثنى الفصيح."]
+        if d.get("avoid"):
+            lines.append(f"- كلمات لهجات ثانية ما تنقال في {d['name']}: {'، '.join(d['avoid'])}.")
+    lines += ["", "أمثلة (إنجليزي ← الترجمة الصحيحة):"] + [f"- {en} ← {ar}" for en, ar in d["examples"]]
+    lines += ["", "قواعد عامة:",
+              "- ترجم المعنى والإحساس، مو ترجمة حرفية.",
+              "- الجملة قصيرة وتنقرأ بسرعة على الشاشة.",
+              "- أسماء الأشخاص والأماكن تكتبها بالحروف العربية.",
+              "- الشتائم والكلام البذيء خفّفه بشكل مناسب.",
+              '- إذا كان النص أصوات أو موسيقى بدون كلام أو كلام غير مفهوم، رجّع نص فاضي "".',
+              "- لا تدمج الجمل ولا تقسمها: كل رقم i له ترجمة وحدة بالضبط.",
+              '- رجّع JSON فقط بهذا الشكل بدون أي كلام ثاني: [{"i": 0, "ar": "..."}, {"i": 1, "ar": "..."}]']
+    return "\n".join(lines)
 
 
 def translators():
@@ -526,7 +537,27 @@ def parse_translation(text, n):
     return out
 
 
-def translate_batch(segs, system, context, llm=None, strict=False):
+def fix_leaks(segs, out, system, dialect, llm=None):
+    """الأسطر اللي فيها فصحى أو لهجة ثانية نعيدها بطلب صغير وحيد"""
+    bad = [(i, leaks(dialect, t)) for i, t in enumerate(out) if t]
+    bad = [(i, w) for i, w in bad if w]
+    if not bad:
+        return out
+    user = ("هذي أسطر ترجمتها وفيها كلمات مو من اللهجة المطلوبة. أعد كتابة كل سطر باللهجة ١٠٠٪ بنفس المعنى:\n" +
+            json.dumps({"الأسطر": [{"i": i, "t": segs[i]["src"], "ترجمتك": out[i], "كلمات_غلط": w} for i, w in bad]}, ensure_ascii=False))
+    try:
+        fixed = parse_translation((llm or call_llm)(system, user), len(segs))
+    except Exception:  # noqa: BLE001
+        return out
+    if fixed:
+        for i, w in bad:
+            if fixed[i] and len(leaks(dialect, fixed[i])) < len(w):
+                out[i] = fixed[i]
+    print(f"تدقيق اللهجة: {len(bad)} سطر فيه كلمات غلط، انصلح منها {sum(1 for i, w in bad if len(leaks(dialect, out[i])) < len(w))}")
+    return out
+
+
+def translate_batch(segs, system, context, llm=None, strict=False, dialect=None):
     payload = {
         "سياق_سابق": context,
         "الجمل": [{"i": i, "t": s["src"]} for i, s in enumerate(segs)],
@@ -540,7 +571,8 @@ def translate_batch(segs, system, context, llm=None, strict=False):
                 raise
             result = None
         if result and sum(1 for r in result if r is not None) >= len(segs) * 0.8:
-            return [r if r is not None else s["src"] for r, s in zip(result, segs)]
+            out = [r if r is not None else s["src"] for r, s in zip(result, segs)]
+            return fix_leaks(segs, out, system, dialect or DIALECT, llm)
     if strict:
         raise RuntimeError("ترجمة الخلفية ما ضبطت")
     return [s["src"] for s in segs]   # آخر حل: النص الأصلي بدل ما يضيع
@@ -623,7 +655,7 @@ def background_dialects(all_segs, title, have):
         batches = [src[i: i + TRANSLATE_BATCH] for i in range(0, len(src), TRANSLATE_BATCH)]
         try:
             with ThreadPoolExecutor(3) as pool:
-                futs = [pool.submit(translate_batch, b, system, [x["src"] for x in batches[i - 1][-3:]] if i else [], call_gemini, True)
+                futs = [pool.submit(translate_batch, b, system, [x["src"] for x in batches[i - 1][-3:]] if i else [], call_gemini, True, d)
                         for i, b in enumerate(batches)]
                 out = []
                 for b, f in zip(batches, futs):

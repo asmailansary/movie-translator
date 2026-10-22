@@ -79,6 +79,9 @@ h1.brand{font-size:30px}
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:6vh;
   transition:opacity .55s cubic-bezier(.4,0,.2,1),transform .55s cubic-bezier(.4,0,.2,1),visibility .55s;will-change:opacity,transform}
 .splash.out{opacity:0;visibility:hidden;transform:scale(1.08)}
+.splash .spvid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s ease;pointer-events:none;z-index:0}
+.splash.hasvid::after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(90% 60% at 50% 45%,#0000 0%,#0008 100%)}
+.splash>*:not(.spvid){position:relative;z-index:1}
 .splash .logo.big{position:relative;width:88px;height:88px;border-radius:24px;will-change:transform;
   animation:pop .8s cubic-bezier(.18,1.35,.4,1) both, glow 2.2s .8s ease-in-out infinite}
 .splash .logo.big svg{width:48px;height:48px}
@@ -387,6 +390,7 @@ body.watching .tabbar{display:none}
 </head>
 <body data-hp="home">
 <div class="splash" id="splash" aria-hidden="true">
+  <video class="spvid" id="spvid" muted playsinline webkit-playsinline autoplay loop preload="auto"></video>
   <div class="logo big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M6 15h4M13 15h5M6 11h8M16 11h2"/></svg></div>
   <div class="brand xl" data-s="name">فهّمني</div>
   <div class="tag" data-s="splash">نفهّمك أي فلم بلهجتك 🍿</div>
@@ -419,11 +423,13 @@ body.watching .tabbar{display:none}
     <button type="button" data-f="all" aria-pressed="true">الكل</button>
     <button type="button" data-f="movie" aria-pressed="false">الأفلام</button>
     <button type="button" data-f="clip" aria-pressed="false">المقاطع</button>
+    <button type="button" data-f="song" aria-pressed="false">الأغاني</button>
     <button type="button" data-go="saved" aria-pressed="false">المحفوظة ❤️</button>
   </nav>
   <section class="home-only hero" data-pane="home" id="hero"></section>
   <section class="home-only rowsec hidden" data-pane="home" id="rowRecent"><h2>كمّل المشاهدة</h2><div class="strip" id="stripRecent"></div></section>
   <section class="home-only rowsec hidden" data-pane="home" id="rowFavs"><h2>المحفوظة ❤️</h2><div class="strip" id="stripFavs"></div></section>
+  <section class="home-only rowsec hidden" data-pane="home" id="rowSongs"><h2>أغاني فهمتها 🎵</h2><div class="strip" id="stripSongs"></div></section>
   <section class="home-only rowsec hidden" data-pane="home" id="rowClips"><h2>مقاطع فهمتها 📱</h2><div class="strip" id="stripClips"></div></section>
 
   <!-- إرشاد: إضافة الأداة للشاشة الرئيسية -->
@@ -483,6 +489,8 @@ body.watching .tabbar{display:none}
     <input id="url" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…">
     <label class="t social-only" for="clipUrl" style="margin-top:12px" data-t="clip_label">رابط المقطع من السوشل 📱</label>
     <input class="social-only" id="clipUrl" type="url" inputmode="url" placeholder="تيك توك، انستا، أو شورتس يوتيوب">
+    <label class="t song-only" for="songUrl" style="margin-top:12px" data-t="song_label">رابط الأغنية من يوتيوب 🎵</label>
+    <input class="song-only" id="songUrl" type="url" inputmode="url" placeholder="https://youtube.com/watch?v=…">
     <div class="row">
       <div>
         <label class="t">لغة الفلم</label>
@@ -671,6 +679,8 @@ body.watching .tabbar{display:none}
     $("#snapBox").href = s.snap_url || $("#snapBox").href;
     $("#snapBox").classList.toggle("hidden", s.show_snap === false);
     document.querySelectorAll(".social-only").forEach(el => el.classList.toggle("hidden", s.show_social === false));
+    document.querySelectorAll(".song-only").forEach(el => el.classList.toggle("hidden", s.show_songs === false));
+    document.querySelectorAll('#hchips [data-f=song]').forEach(el => el.classList.toggle("hidden", s.show_songs === false));
     $("#maintBox").textContent = s.maintenance ? "🛠️ " + s.maintenance_msg : ""; $("#maintBox").classList.toggle("hidden", !s.maintenance);
     $("#annBox").textContent = s.announcement || ""; $("#annBox").classList.toggle("hidden", !s.announcement);
     $("#goBtn").disabled = Boolean(s.maintenance);
@@ -740,7 +750,8 @@ body.watching .tabbar{display:none}
   };
   const CLIP_INTRO_DEFAULT = "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨";
   // نفس الكلام بس للمقاطع: «المقطع» بدل «الفلم»
-  const word = t => (job?.kind === "clip" ? String(t).replace(/فلمك/g, "مقطعك").replace(/الفلم/g, "المقطع").replace(/فلم /g, "مقطع ") : t);
+  const word = t => (job?.kind === "clip" ? String(t).replace(/فلمك/g, "مقطعك").replace(/الفلم/g, "المقطع").replace(/فلم /g, "مقطع ")
+    : job?.kind === "song" ? String(t).replace(/فلمك/g, "أغنيتك").replace(/الفلم/g, "الأغنية").replace(/فلم /g, "أغنية ") : t);
 
   // ───── البداية
   if (standalone && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -817,10 +828,10 @@ body.watching .tabbar{display:none}
   }
   $("#form").addEventListener("submit", e => {
     e.preventDefault();
-    const movie = $("#url").value.trim(), clip = $("#clipUrl").value.trim();
-    if (movie && clip) return showErr("حط رابط واحد بس 😅 يا فلم يا مقطع");
-    if (!movie && !clip) return showErr("الصق رابط الفلم أو المقطع أول 🔗");
-    start(movie || clip, lang, dialect, 0, clip ? "clip" : "movie");
+    const movie = $("#url").value.trim(), clip = $("#clipUrl").value.trim(), song = $("#songUrl").value.trim();
+    if ([movie, clip, song].filter(Boolean).length > 1) return showErr("حط رابط واحد بس 😅 يا فلم يا مقطع يا أغنية");
+    if (!movie && !clip && !song) return showErr("الصق رابط الفلم أو المقطع أو الأغنية أول 🔗");
+    start(movie || clip || song, lang, dialect, 0, clip ? "clip" : song ? "song" : "movie");
   });
 
   function resetSubs() { segs = []; lastIdx = -1; readyUntil = 0; jobDone = false; edgeMode = false; doneWins = new Set(); wasWaiting = false; $("#subs").innerHTML = ""; }
@@ -870,7 +881,7 @@ body.watching .tabbar{display:none}
     setCinema(false); closeSheet();
     document.body.classList.remove("watching", "vert");
     $("#watch").classList.add("hidden");
-    $("#url").value = ""; $("#clipUrl").value = ""; $("#subs").innerHTML = ""; document.title = "فهّمني 🍿";
+    $("#url").value = ""; $("#clipUrl").value = ""; $("#songUrl").value = ""; $("#subs").innerHTML = ""; document.title = "فهّمني 🍿";
     history.replaceState(null, "", "/"); setHP("home"); loadFavs(); renderRecent();
     animate(document.querySelector(".wrap"), "screen-back"); window.scrollTo({ top: 0 });
     if (!fromPop && history.state?.w) history.back();
@@ -893,7 +904,7 @@ body.watching .tabbar{display:none}
     stage.classList.remove("started", "ended"); stage.classList.add("paused");
     openerDone = false; prepOpener();
     loadVideo(vid, resumeAt); poll(); updateHint();
-    document.title = kind === "clip" ? "فهّمني · مقطع 📱" : "فهّمني · فلم 🎬";
+    document.title = kind === "clip" ? "فهّمني · مقطع 📱" : kind === "song" ? "فهّمني · أغنية 🎵" : "فهّمني · فلم 🎬";
     showWatch(true);
     upsertRecent({ position: resumeAt || 0, done: false });
     window.scrollTo({ top: 0 });
@@ -1008,6 +1019,16 @@ body.watching .tabbar{display:none}
     requestAnimationFrame(() => { topbar.classList.toggle("scrolled", window.scrollY > 8); scrollQueued = false; });
   }, { passive: true });
   // شاشة الافتتاح
+  // فيديو خلف الافتتاحية (من لوحة التحكم): يطلع بالشفافية اللي اختارها الأدمن
+  (() => {
+    if (!S.splash_video) return;
+    const v = $("#spvid"); $("#splash").classList.add("hasvid");
+    v.src = "/brand/splash?v=" + (S.splash_video_v || 0);
+    const op = Math.max(.05, Math.min(1, (S.splash_video_opacity ?? 45) / 100));
+    v.addEventListener("playing", () => { v.style.opacity = op; }, { once: true });
+    v.play?.().catch(() => {});
+    $("#splash").addEventListener("transitionend", () => { if ($("#splash").classList.contains("out")) { v.pause(); v.removeAttribute("src"); v.load(); } }, { once: true });
+  })();
   const splashMin = Math.max(300, Math.min(6000, S.splash_ms || 1700)), t0 = performance.now();
   const hideSplash = () => setTimeout(() => { $("#splash").classList.add("out"); animate(document.querySelector(".wrap"), "app-in"); }, Math.max(0, splashMin - (performance.now() - t0)));
   if (document.readyState === "complete") hideSplash(); else window.addEventListener("load", hideSplash, { once: true });
@@ -1373,7 +1394,7 @@ body.watching .tabbar{display:none}
     for (const f of favs) {
       const row = document.createElement("div"); row.className = "fav";
       const open = document.createElement("button"); open.type = "button"; open.className = "open";
-      const tt = document.createElement("span"); tt.className = "tt"; tt.textContent = (f.kind === "clip" ? "📱 " : "🎬 ") + (f.title || (f.kind === "clip" ? "مقطع" : "فلم") + " بدون اسم");
+      const tt = document.createElement("span"); tt.className = "tt"; tt.textContent = (f.kind === "clip" ? "📱 " : f.kind === "song" ? "🎵 " : "🎬 ") + (f.title || kindName(f.kind) + " بدون اسم");
       const sm = document.createElement("small");
       sm.textContent = `${dName(f.dialect)} · ${f.position > 5 ? "وقفت عند " + fmt(f.position) : "من البداية"}`;
       const mini = document.createElement("div"); mini.className = "mini";
@@ -1426,7 +1447,7 @@ body.watching .tabbar{display:none}
       const row = document.createElement("div"); row.className = "fav";
       const open = document.createElement("button"); open.type = "button"; open.className = "open";
       const tt = document.createElement("span"); tt.className = "tt";
-      tt.textContent = (r.kind === "clip" ? "📱 " : "🎬 ") + (r.title || (r.done ? (r.kind === "clip" ? "مقطع" : "فلم") : "يتجهز… ⏳"));
+      tt.textContent = (r.kind === "clip" ? "📱 " : r.kind === "song" ? "🎵 " : "🎬 ") + (r.title || (r.done ? kindName(r.kind) : "يتجهز… ⏳"));
       const sm = document.createElement("small");
       sm.textContent = `${dName(r.dialect)} · ${!r.done ? "للحين يتجهز ⏳" : r.position > 5 ? "وقفت عند " + fmt(r.position) : "من البداية"}`;
       const mini = document.createElement("div"); mini.className = "mini";
@@ -1483,7 +1504,7 @@ body.watching .tabbar{display:none}
     const f = favs.find(f => homeFilter === "all" || (f.kind || "movie") === homeFilter);
     return f ? { ...f, vid: f.video_id, from: "fav" } : null;
   }
-  const kindName = k => (k === "clip" ? "مقطع" : "فلم");
+  const kindName = k => (k === "clip" ? "مقطع" : k === "song" ? "أغنية" : "فلم");
   function renderHero() {
     const h = $("#hero"), it = heroItem(); h.innerHTML = "";
     const p = document.createElement("div"); p.className = "poster"; h.append(p);
@@ -1533,7 +1554,7 @@ body.watching .tabbar{display:none}
     if (src) { const im = new Image(); im.alt = ""; im.loading = "lazy"; im.src = src; im.onerror = () => im.replaceWith(ph()); b.append(im); }
     else if (it.vid && (it.done !== false)) { const v = document.createElement("video"); v.muted = true; v.playsInline = true; v.preload = "metadata"; v.src = `/media/${it.vid}.mp4#t=0.6`; b.append(v); }
     else b.append(ph());
-    function ph() { const d = document.createElement("div"); d.className = "ph"; d.textContent = it.kind === "clip" ? "📱" : "🎬"; return d; }
+    function ph() { const d = document.createElement("div"); d.className = "ph"; d.textContent = it.kind === "clip" ? "📱" : it.kind === "song" ? "🎵" : "🎬"; return d; }
     const sh = document.createElement("div"); sh.className = "tsh"; b.append(sh);
     const { name } = cleanTitle(it.title);
     const tt = document.createElement("div"); tt.className = "tt" + (name && isLat(name) ? " lat" : "");
@@ -1553,10 +1574,12 @@ body.watching .tabbar{display:none}
       const st = $(stripId); st.innerHTML = ""; list.forEach(it => st.append(tile(it, opts(it))));
       $(rowId).classList.toggle("hidden", !list.length);
     };
-    fill("#rowRecent", "#stripRecent", rec.filter(r => want(r) && (r.kind || "movie") !== "clip"), it => ({
+    fill("#rowRecent", "#stripRecent", rec.filter(r => want(r) && (r.kind || "movie") === "movie"), it => ({
       onDel: () => { store.set("recent2", store.get("recent2", []).filter(x => x.vid !== it.vid)); renderRecent(); } }));
     fill("#rowFavs", "#stripFavs", fav.filter(want), it => ({ tall: it.kind === "clip" }));
-    fill("#rowClips", "#stripClips", homeFilter === "movie" ? [] : rec.filter(r => r.kind === "clip"), it => ({ tall: true,
+    fill("#rowSongs", "#stripSongs", ["all", "song"].includes(homeFilter) ? rec.filter(r => r.kind === "song") : [], it => ({
+      onDel: () => { store.set("recent2", store.get("recent2", []).filter(x => x.vid !== it.vid)); renderRecent(); } }));
+    fill("#rowClips", "#stripClips", ["all", "clip"].includes(homeFilter) ? rec.filter(r => r.kind === "clip") : [], it => ({ tall: true,
       onDel: () => { store.set("recent2", store.get("recent2", []).filter(x => x.vid !== it.vid)); renderRecent(); } }));
     renderHero();
   }

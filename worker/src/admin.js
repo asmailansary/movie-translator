@@ -31,7 +31,12 @@ export const DEFAULT_SETTINGS = {
   show_social: true,
   show_dub: true,
   show_snap: true,
-  dialects_enabled: ["fusha", "najdi", "hijazi", "khaleeji", "yemeni", "egyptian", "shami", "iraqi"],
+  dialects_enabled: ["fusha", "najdi", "hijazi", "yemeni", "egyptian", "iraqi"],
+  dialect_names: {},        // أسماء يكتبها الأدمن (مثلاً: نجدية 🇸🇦)
+  show_songs: true,         // خانة الأغاني
+  splash_video: false,      // فيديو خلف شاشة الافتتاح
+  splash_video_v: 0,
+  splash_video_opacity: 45, // شفافية الفيديو (٠-١٠٠)
   default_dialect: "najdi",
   font_size: 12,
   daily_per_device: 8,
@@ -42,6 +47,7 @@ export const DEFAULT_SETTINGS = {
   texts: {
     movie_label: "رابط الفلم من يوتيوب 🎬",
     clip_label: "رابط المقطع من السوشل 📱",
+    song_label: "رابط الأغنية من يوتيوب 🎵",
     go_btn: "ترجم وشغّل 🎬",
     clip_intro: "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨",
     dub_msg: "شغالين على الدبلجة واذا صارت متوفرة بنعلمك💬",
@@ -67,6 +73,10 @@ export async function getSettings(env) {
   const obj = await env.BUCKET.get(SETTINGS_KEY);
   const saved = obj ? await obj.json() : {};
   const value = { ...DEFAULT_SETTINGS, ...saved, texts: { ...DEFAULT_SETTINGS.texts, ...(saved.texts || {}) } };
+  // لهجات انشالت (الخليجية والشامية) تطيح من الإعدادات القديمة
+  value.dialects_enabled = (value.dialects_enabled || []).filter((d) => DIALECT_KEYS.includes(d));
+  if (!value.dialects_enabled.length) value.dialects_enabled = [...DIALECT_KEYS];
+  if (!value.dialects_enabled.includes(value.default_dialect)) value.default_dialect = value.dialects_enabled.includes("najdi") ? "najdi" : value.dialects_enabled[0];
   cache = { at: Date.now(), value };
   return value;
 }
@@ -87,9 +97,15 @@ function clean(input, current) {
     const u = str(input.snap_url, 200);
     out.snap_url = /^https:\/\/([a-z0-9-]+\.)*snapchat\.com\//i.test(u) ? u : current.snap_url;
   }
-  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_on", "intro_skip"]) if (k in input) out[k] = bool(input[k]);
+  for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_on", "intro_skip", "show_songs"]) if (k in input) out[k] = bool(input[k]);
   if (input.intro_every === "always" || input.intro_every === "daily") out.intro_every = input.intro_every;
   if (input.intro_where === "all" || input.intro_where === "films") out.intro_where = input.intro_where;
+  if ("splash_video_opacity" in input) out.splash_video_opacity = int(input.splash_video_opacity, 5, 100, current.splash_video_opacity ?? 45);
+  if (input.dialect_names && typeof input.dialect_names === "object") {
+    const n = {};
+    for (const k of DIALECT_KEYS) { const v = str(input.dialect_names[k], 24).trim(); if (v) n[k] = v; }
+    out.dialect_names = n;
+  }
   if ("tap_volume" in input) out.tap_volume = int(input.tap_volume, 0, 100, current.tap_volume);
   if ("splash_ms" in input) out.splash_ms = int(input.splash_ms, 300, 6000, current.splash_ms);
   if ("dialects_enabled" in input && Array.isArray(input.dialects_enabled)) {
@@ -296,6 +312,26 @@ export async function adminApi(request, env, ctx, action, safeEqual) {
     cache = { at: 0, value: null };
     return json({ ok: true, settings: next });
   }
+  if (action === "splash-video" && request.method === "POST") {
+    const type = (request.headers.get("content-type") || "").split(";")[0].trim();
+    const size = +request.headers.get("content-length") || 0;
+    if (!/^video\/(mp4|quicktime|x-m4v)$/.test(type)) return json({ error: "لازم فيديو mp4 أو mov 🎬" }, 400);
+    if (!size || size > INTRO_MAX) return json({ error: "الفيديو كبير 😅 خله أقل من ٣٠ ميقا (يكفي ٥-١٠ ثواني)" }, 400);
+    await env.BUCKET.put("config/splash-video", request.body, { httpMetadata: { contentType: type } });
+    const s = await getSettings(env);
+    const next = { ...s, splash_video: true, splash_video_v: (s.splash_video_v || 0) + 1 };
+    await env.BUCKET.put(SETTINGS_KEY, JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
+    cache = { at: 0, value: null };
+    return json({ ok: true, settings: next });
+  }
+  if (action === "splash-video-reset" && request.method === "POST") {
+    await env.BUCKET.delete("config/splash-video");
+    const s = await getSettings(env);
+    const next = { ...s, splash_video: false, splash_video_v: (s.splash_video_v || 0) + 1 };
+    await env.BUCKET.put(SETTINGS_KEY, JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
+    cache = { at: 0, value: null };
+    return json({ ok: true, settings: next });
+  }
   if (action === "intro-reset" && request.method === "POST") {
     await env.BUCKET.delete("config/intro");
     const s = await getSettings(env);
@@ -353,7 +389,7 @@ export async function serveManifest(env) {
 const INTRO_MAX = 30 * 1024 * 1024;
 
 /** الانترو: يدعم Range عشان الآيفون يشغّله فوراً بدون ما يحمّله كامل */
-export async function serveIntro(request, env) {
+export async function serveIntro(request, env, key = "config/intro") {
   const range = request.headers.get("range");
   const m = range && range.match(/bytes=(\d*)-(\d*)/);
   const opts = {};
@@ -361,7 +397,7 @@ export async function serveIntro(request, env) {
     const start = m[1] ? +m[1] : undefined, end = m[2] ? +m[2] : undefined;
     opts.range = start === undefined ? { suffix: end } : end === undefined ? { offset: start } : { offset: start, length: end - start + 1 };
   }
-  const obj = await env.BUCKET.get("config/intro", opts);
+  const obj = await env.BUCKET.get(key, opts);
   if (!obj) return new Response("", { status: 404 });
   const h = new Headers({ "content-type": obj.httpMetadata?.contentType || "video/mp4", "accept-ranges": "bytes", "cache-control": "public, max-age=604800", "x-content-type-options": "nosniff" });
   if (m && obj.range) {

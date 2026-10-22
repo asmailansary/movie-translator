@@ -81,6 +81,10 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
 .colors button{width:38px;height:38px;border-radius:50%;border:3px solid transparent}
 .colors button[aria-pressed=true]{border-color:var(--text)}
 .colors input[type=color]{width:44px;height:40px;border:0;background:none;padding:0}
+.dnames{display:grid;gap:8px}
+.dn{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:8px}
+.dn span{font-size:13px;color:var(--muted)}
+.dn input{width:100%;font:inherit;font-size:15px;color:var(--text);background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
 .upbar{height:6px;border-radius:9px;background:#ffffff1a;overflow:hidden;margin:6px 0 10px}
 .upbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .bgs{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -195,6 +199,20 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
       <p class="note">💡 الأحلى انترو ٣-٨ ثواني بخلفية سودا أو بلون خلفية التطبيق، عشان يذوب في الفلم. أقصى حجم ٣٠ ميقا.</p>
     </div>
     <div class="card">
+      <h2>فيديو خلف الافتتاحية 🎞️</h2>
+      <p class="note" style="margin-top:0">لقطة تشتغل بملء الشاشة بدون صوت ورا شعار الافتتاح، عشان تحمّس المستخدم أول ما يفتح التطبيق.</p>
+      <video id="spPrev" class="hidden" playsinline muted loop autoplay style="width:100%;border-radius:14px;background:#000;margin:8px 0;max-height:240px"></video>
+      <div class="upbar hidden" id="spBar"><i id="spFill"></i></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn sec" type="button" id="pickSp" style="flex:2">ارفع فيديو من جوالك</button>
+        <button class="btn danger" type="button" id="resetSp" style="flex:1">احذفه</button>
+      </div>
+      <input type="file" id="spFile" accept="video/mp4,video/quicktime,video/*" class="hidden">
+      <label class="f">وضوح الفيديو: <b id="spOpV"></b></label>
+      <input type="range" id="s_splash_video_opacity" min="5" max="100" step="5" style="width:100%;accent-color:var(--accent)">
+      <p class="note">💡 الأفضل لقطة ٥-١٠ ثواني بالطول (مثل مقاس الجوال). ولو تبي الشعار يبان أكثر خفّف الوضوح. استخدم لقطات عندك حق استخدامها.</p>
+    </div>
+    <div class="card">
       <h2>لون الأداة 🎨</h2>
       <div class="colors" id="colors"></div>
     </div>
@@ -263,12 +281,15 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
       <div class="chips" id="dialChips"></div>
       <label class="f">اللهجة الافتراضية</label>
       <div class="chips" id="defChips"></div>
+      <label class="f">أسماء اللهجات (تقدر تضيف علم 🇸🇦)</label>
+      <div id="dialNames" class="dnames"></div>
       <label class="f">حجم خط الترجمة الافتراضي</label>
       <div class="num"><input type="number" id="s_font_size" min="10" max="30"></div>
     </div>
     <div class="card">
       <h2>الأقسام 🧩</h2>
       <div class="row"><div class="lbl">خانة مقاطع السوشل 📱</div><label class="sw"><input type="checkbox" id="s_show_social"><i></i></label></div>
+      <div class="row"><div class="lbl">خانة الأغاني 🎵</div><label class="sw"><input type="checkbox" id="s_show_songs"><i></i></label></div>
       <div class="row"><div class="lbl">زر الدبلجة 🎙️</div><label class="sw"><input type="checkbox" id="s_show_dub"><i></i></label></div>
       <div class="row"><div class="lbl">بطاقة سناب 👻</div><label class="sw"><input type="checkbox" id="s_show_snap"><i></i></label></div>
       <label class="f">رابط سناب</label>
@@ -306,11 +327,12 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
   const api = (p, o = {}) => fetch("/api/admin/" + p, { ...o, headers: { "x-admin-key": key, ...(o.body && !(o.body instanceof FormData) ? { "content-type": "application/json" } : {}), ...(o.headers || {}) } });
   const toast = m => { const t = $("#toast"); t.textContent = m; t.classList.add("on"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2400); };
 
-  const DIALECTS = { fusha: "الفصحى", najdi: "نجدية", hijazi: "حجازية", khaleeji: "خليجية", yemeni: "يمنية", egyptian: "مصرية", shami: "شامية", iraqi: "عراقية" };
+  const DIALECTS0 = { fusha: "الفصحى", najdi: "نجدية", hijazi: "حجازية", yemeni: "يمنية", egyptian: "مصرية", iraqi: "عراقية" };
+  const dn = k => (val("dialect_names") || {})[k] || DIALECTS0[k];
   const BGS = [["#0d0b09", "بني"], ["#121214", "فحمي"], ["#0f1730", "كحلي"], ["#0b1229", "ليلي"], ["#16112a", "بنفسجي"], ["#1a1020", "توتي"], ["#0b1a17", "زمردي"], ["#0f1419", "رمادي"]];
   const COLORS = ["#e0a84a", "#e8735a", "#d9577b", "#9b7be0", "#4f8ff0", "#2fb4a6", "#5cb85c", "#c9a227"];
   const TEXTS = {
-    movie_label: "عنوان خانة رابط الفلم", clip_label: "عنوان خانة رابط المقطع", go_btn: "زر الترجمة",
+    movie_label: "عنوان خانة رابط الفلم", clip_label: "عنوان خانة رابط المقطع", song_label: "عنوان خانة رابط الأغنية", go_btn: "زر الترجمة",
     clip_intro: "أول رسالة لما يترجم مقطع", switch_btn: "زر تبديل الترجمة", dub_msg: "رسالة زر الدبلجة",
     download_confirm: "تنبيه قبل تحميل الترجمة", ready_toast: "رسالة «جاهز» داخل الأداة", fav_empty: "لما ما فيه محفوظة",
     snap_title: "عنوان بطاقة سناب", snap_sub: "نص بطاقة سناب",
@@ -414,11 +436,18 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     for (const k of ["name", "tagline", "splash", "announcement", "snap_url", "maintenance_msg", "daily_per_device", "daily_total", "font_size"]) {
       const el = $("#s_" + k); el.value = val(k) ?? ""; el.oninput = () => set(k, el.type === "number" ? +el.value : el.value);
     }
-    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_skip"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
+    for (const k of ["show_social", "show_dub", "show_snap", "maintenance", "user_theme_toggle", "tap_sound", "intro_skip", "show_songs"]) { const el = $("#s_" + k); el.checked = val(k) !== false; el.onchange = () => set(k, el.checked); }
     const sp = $("#s_splash_ms"), spv = () => { $("#splashV").textContent = (val("splash_ms") / 1000).toFixed(1) + " ثانية"; };
     sp.value = val("splash_ms"); spv(); sp.oninput = () => { set("splash_ms", +sp.value); spv(); };
     const tv = $("#s_tap_volume"), tvv = () => { $("#tapVolV").textContent = val("tap_volume") + "٪"; };
     tv.value = val("tap_volume"); tvv(); tv.oninput = () => { set("tap_volume", +tv.value); tvv(); };
+    // فيديو الافتتاحية
+    const splVid = $("#spPrev"), spSrc = "/brand/splash?v=" + (S.splash_video_v || 0);
+    splVid.classList.toggle("hidden", !S.splash_video); $("#resetSp").classList.toggle("hidden", !S.splash_video);
+    if (S.splash_video && splVid.dataset.src !== spSrc) { splVid.dataset.src = spSrc; splVid.src = spSrc; }
+    splVid.style.opacity = (val("splash_video_opacity") ?? 45) / 100;
+    const so = $("#s_splash_video_opacity"); so.value = val("splash_video_opacity") ?? 45; $("#spOpV").textContent = so.value + "٪";
+    so.oninput = () => { set("splash_video_opacity", +so.value); $("#spOpV").textContent = so.value + "٪"; splVid.style.opacity = so.value / 100; };
     // الانترو
     const io = $("#s_intro_on"); io.checked = !!val("intro_on"); io.disabled = !S.custom_intro;
     io.onchange = () => set("intro_on", io.checked);
@@ -434,13 +463,27 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
     // اللهجات
     const en = val("dialects_enabled");
     $("#dialChips").innerHTML = ""; $("#defChips").innerHTML = "";
-    for (const [k, n] of Object.entries(DIALECTS)) {
+    for (const k of Object.keys(DIALECTS0)) { const n = dn(k);
       $("#dialChips").append(chip(n, en.includes(k), () => {
         const next = en.includes(k) ? en.filter(x => x !== k) : [...en, k];
         if (!next.length) return toast("لازم لهجة وحدة على الأقل 😅");
         set("dialects_enabled", next); render();
       }));
       if (en.includes(k)) $("#defChips").append(chip(n, k === val("default_dialect"), () => { set("default_dialect", k); render(); }));
+    }
+    // أسماء اللهجات
+    const nb = $("#dialNames");
+    if (!nb.children.length || nb.dataset.v !== JSON.stringify(val("dialect_names") || {})) {
+      nb.innerHTML = ""; nb.dataset.v = JSON.stringify(val("dialect_names") || {});
+      for (const k of Object.keys(DIALECTS0)) {
+        const row = document.createElement("div"); row.className = "dn";
+        const lab = document.createElement("span"); lab.textContent = DIALECTS0[k];
+        const inp = document.createElement("input"); inp.value = (val("dialect_names") || {})[k] || ""; inp.placeholder = DIALECTS0[k] + " 🇸🇦"; inp.maxLength = 24;
+        inp.oninput = () => { const n = { ...(val("dialect_names") || {}) }; const v = inp.value.trim(); if (v) n[k] = v; else delete n[k];
+          set("dialect_names", n); nb.dataset.v = JSON.stringify(n); };
+        inp.onchange = () => render();
+        row.append(lab, inp); nb.append(row);
+      }
     }
     // النصوص
     const card = $("#textsCard"); card.querySelectorAll(".tx").forEach(x => x.remove());
@@ -553,6 +596,30 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
       else toast(d.error || "ما قدرنا نرفعه 😕 جرّب مرة ثانية");
     };
     x.send(f);
+  };
+  // ───── فيديو الافتتاحية
+  $("#pickSp").onclick = () => $("#spFile").click();
+  $("#spFile").onchange = () => {
+    const f = $("#spFile").files[0]; $("#spFile").value = ""; if (!f) return;
+    const type = /^video\/(mp4|quicktime|x-m4v)$/.test(f.type) ? f.type : /\.mov$/i.test(f.name) ? "video/quicktime" : /\.(mp4|m4v)$/i.test(f.name) ? "video/mp4" : "";
+    if (!type) return toast("لازم فيديو mp4 أو mov 🎬");
+    if (f.size > 30 * 1024 * 1024) return toast("الفيديو كبير 😅 خله أقل من ٣٠ ميقا");
+    const bar = $("#spBar"), fill = $("#spFill"); bar.classList.remove("hidden"); fill.style.width = "0"; $("#pickSp").disabled = true;
+    const x = new XMLHttpRequest(); x.open("POST", "/api/admin/splash-video");
+    x.setRequestHeader("x-admin-key", key); x.setRequestHeader("content-type", type);
+    x.upload.onprogress = e => { if (e.lengthComputable) fill.style.width = (e.loaded / e.total * 100).toFixed(0) + "%"; };
+    x.onloadend = () => {
+      $("#pickSp").disabled = false; bar.classList.add("hidden");
+      let d = {}; try { d = JSON.parse(x.responseText); } catch {}
+      if (x.status === 200 && d.settings) { S = d.settings; render(); toast("تم ✓ صار الفيديو خلف الافتتاحية 🎞️"); }
+      else toast(d.error || "ما قدرنا نرفعه 😕 جرّب مرة ثانية");
+    };
+    x.send(f);
+  };
+  $("#resetSp").onclick = async () => {
+    if (!confirm("تحذف فيديو الافتتاحية؟")) return;
+    const r = await api("splash-video-reset", { method: "POST" }); const d = await r.json();
+    if (r.ok) { S = d.settings; $("#spPrev").removeAttribute("src"); $("#spPrev").dataset.src = ""; render(); toast("انحذف ✓"); }
   };
   $("#resetIntro").onclick = async () => {
     if (!confirm("تحذف الانترو؟")) return;

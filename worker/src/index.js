@@ -19,12 +19,16 @@ const DIALECTS = {
   fusha: { name: "الفصحى", group: "fusha" },
   najdi: { name: "نجدية", group: "dialect" },
   hijazi: { name: "حجازية", group: "dialect" },
-  khaleeji: { name: "خليجية", group: "dialect" },
   yemeni: { name: "يمنية", group: "dialect" },
   egyptian: { name: "مصرية", group: "dialect" },
-  shami: { name: "شامية", group: "dialect" },
   iraqi: { name: "عراقية", group: "dialect" },
 };
+
+// أسماء اللهجات اللي يكتبها الأدمن (مع الأعلام) تطلع للمستخدم، والترجمة تستخدم الاسم الأصلي
+async function namedDialects(env) {
+  const names = (await getSettings(env)).dialect_names || {};
+  return Object.fromEntries(Object.entries(DIALECTS).map(([k, v]) => [k, { ...v, name: names[k] || v.name }]));
+}
 
 const START_TIMEOUT = 10 * 60 * 1000;   // لو GitHub ما بدأ خلال 10 دقائق
 const STALL_TIMEOUT = 20 * 60 * 1000;   // لو وقف التحديث 20 دقيقة
@@ -161,6 +165,7 @@ async function dispatch(env, job, origin) {
           callback: origin,
           reuse: job.reuse ? "1" : "0",
           media_url: job.platform === "youtube" ? "" : job.media_url,
+          kind: job.kind || "movie",
         },
       }),
     }
@@ -212,12 +217,13 @@ async function createJob(request, env) {
   } catch {
     return json({ error: "طلب غير صالح." }, 400);
   }
-  const kind = body.kind === "clip" ? "clip" : "movie";
+  const kind = ["clip", "song"].includes(body.kind) ? body.kind : "movie";
   const media = await parseMedia(body.url);
   const source = body.source || "auto";
   const dialect = body.dialect || "najdi";
   if (!media) return json({ error: kind === "clip" ? "الرابط مو رابط مقطع من يوتيوب أو تيك توك أو انستا 🤔" : "الرابط مو رابط فيديو يوتيوب صحيح 🤔" }, 400);
-  if (kind === "movie" && media.platform !== "youtube") return json({ error: "هذا رابط مقطع سوشل 📱 حطه في خانة «رابط المقطع من السوشل»" }, 400);
+  if (kind !== "clip" && media.platform !== "youtube") return json({ error: "هذا رابط مقطع سوشل 📱 حطه في خانة «رابط المقطع من السوشل»" }, 400);
+  if (kind === "song" && st.show_songs === false) return json({ error: "خانة الأغاني موقفة حالياً 🙏" }, 400);
   const vid = media.vid, shortsHint = media.shorts || media.platform !== "youtube";
   const meta = { platform: media.platform, kind, media_url: media.url };
   if (!(source in LANGS) || !(dialect in DIALECTS)) return json({ error: "اختيار اللغة أو اللهجة غير صحيح." }, 400);
@@ -472,7 +478,7 @@ async function edgeStep(request, env, id, ctx) {
   let out = [];
   if (part.length) {
     try {
-      out = await translateLines(env, systemPrompt(job.dialect, DIALECTS[job.dialect].name, src.title), part, before);
+      out = await translateLines(env, systemPrompt(job.dialect, DIALECTS[job.dialect].name, src.title, src.kind || job.kind || "movie"), part, before, job.dialect);
     } catch (e) {
       // ما ضبط هنا (مثلاً خلص حد Gemini): نكمل بالطريقة العادية عن طريق GitHub
       job.edge = false; job.status = "queued"; job.stage = "نكمل الترجمة… ⏳"; job.created = Date.now();
@@ -640,7 +646,7 @@ async function favorites(request, env, key) {
     const num = (x, d) => (Number.isFinite(+x) && +x >= 0 ? Math.min(+x, 86400) : d);
     favs[k] = {
       key: k, video_id: vid, source: b.source, dialect: b.dialect,
-      kind: b.kind === "clip" ? "clip" : (old.kind || "movie"),
+      kind: ["clip", "song"].includes(b.kind) ? b.kind : (old.kind || "movie"),
       url: /^https:\/\/(www\.)?(youtube\.com|youtu\.be|tiktok\.com|instagram\.com)\//.test(String(b.url || "")) ? String(b.url).slice(0, 300) : (old.url || ""),
       title: String(b.title ?? old.title ?? "").slice(0, 200),
       position: num(b.position, old.position || 0),
@@ -706,7 +712,7 @@ export default {
       if (path === "/api/config" && request.method === "GET")
         return json({
           languages: LANGS,
-          dialects: DIALECTS,
+          dialects: await namedDialects(env),
           ready: Boolean(env.GH_TOKEN && env.INGEST_SECRET && env.BUCKET),
         });
       if (path === "/api/jobs" && request.method === "POST") return createJob(request, env);
@@ -724,10 +730,11 @@ export default {
       m = path.match(/^\/api\/meta\/([A-Za-z0-9_-]{11})$/);
       if (m && request.method === "GET") return meta(env, m[1]);
       if (path === "/api/settings" && request.method === "GET") return json(publicSettings(await getSettings(env)));
-      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast|tap|tap-reset|intro|intro-reset|stats-reset)$/);
+      m = path.match(/^\/api\/admin\/(login|stats|settings|reset|icon|icon-reset|broadcast|tap|tap-reset|intro|intro-reset|stats-reset|splash-video|splash-video-reset)$/);
       if (m) return adminApi(request, env, ctx, m[1], safeEqual);
       if (path === "/brand/tap") return serveTap(env);
       if (path === "/brand/intro" && (request.method === "GET" || request.method === "HEAD")) return serveIntro(request, env);
+      if (path === "/brand/splash" && (request.method === "GET" || request.method === "HEAD")) return serveIntro(request, env, "config/splash-video");
       m = path.match(/^\/brand\/icon-(180|192|512)\.png$/);
       if (m) return serveIcon(request, env, m[1]);
       if (path === "/app.webmanifest") return serveManifest(env);
