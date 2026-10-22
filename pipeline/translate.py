@@ -218,6 +218,18 @@ def split_audio(src: Path, workdir: Path, name="chunks"):
     return chunks
 
 
+def split_first(src: Path, workdir: Path):
+    """يقص أول جزء بسرعة عشان تبدأ الترجمة قبل ما يتقطّع الفلم كامل."""
+    out = workdir / "first.mp3"
+    r = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-t", str(CHUNK_SECONDS),
+         "-vn", "-ac", "1", "-ar", "16000", "-b:a", "48k", str(out)],
+    )
+    if r.returncode != 0 or not out.exists():
+        return None
+    return (out, 0.0, probe_duration(out))
+
+
 def probe_duration(path: Path) -> float:
     r = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(path)],
@@ -512,11 +524,10 @@ def validate_inputs():
 # ───────────────────────── تشغيل المهمة كاملة ─────────────────────────
 def run():
     workdir = Path(tempfile.mkdtemp(prefix="mt_"))
-    report(status="running", stage="سحب صوت أول جزء…", progress=0.03)
+    report(status="running", stage="سحب صوت الفلم…", progress=0.03)
 
-    # ١) نسحب أول ١٠ دقائق من الصوت بس، عشان تبدأ المشاهدة بسرعة
-    first, title, duration = download_audio(VIDEO_ID, workdir, stem="first", section_end=CHUNK_SECONDS)
-    long_movie = bool(duration) and duration > CHUNK_SECONDS + 30
+    # ١) نسحب الصوت بس (بدون فيديو) — سريع حتى لفلم ساعتين
+    audio, title, duration = download_audio(VIDEO_ID, workdir, stem="audio")
     total = max(1, -(-int(duration or CHUNK_SECONDS) // CHUNK_SECONDS))
     report(title=title, duration=duration, stage="تفريغ وترجمة أول جزء…", progress=0.06)
 
@@ -525,17 +536,15 @@ def run():
     chunk_q: queue.Queue = queue.Queue()   # قطع الصوت الجاهزة
     seg_q: queue.Queue = queue.Queue()     # الجمل المفرّغة الجاهزة للترجمة
 
-    # ٢) سحب الباقي في الخلفية وانت تتفرج
+    # ٢) أول ١٠ دقائق تتجهز على طول، والباقي يتقطّع وانت تتفرج
     def downloader():
         try:
-            if long_movie:
-                chunk_q.put(split_audio(first, workdir, "first_chunks")[0])
-                full, _, _ = download_audio(VIDEO_ID, workdir, stem="full")
-                for ch in split_audio(full, workdir, "full_chunks")[1:]:
-                    chunk_q.put(ch)
-            else:
-                for ch in split_audio(first, workdir, "first_chunks"):
-                    chunk_q.put(ch)
+            first = split_first(audio, workdir)
+            if first:
+                chunk_q.put(first)
+            rest = split_audio(audio, workdir, "chunks")
+            for ch in (rest[1:] if first else rest):
+                chunk_q.put(ch)
         except Exception as e:  # noqa: BLE001
             chunk_q.put(e)
         chunk_q.put(None)
