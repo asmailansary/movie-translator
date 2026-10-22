@@ -60,7 +60,30 @@ jobs:
 
       - name: تثبيت yt-dlp
         timeout-minutes: 5
-        run: pip install -q -U "yt-dlp[default]"
+        run: pip install -q -U "yt-dlp[default]" "urllib3[socks]"
+
+      # يوتيوب يمنع عناوين GitHub؛ WARP يخلي طلبات يوتيوب تطلع من Cloudflare
+      # (وضع proxy: يمر منه يوتيوب بس، وباقي اتصالات GitHub تبقى عادية)
+      - name: تشغيل Cloudflare WARP
+        timeout-minutes: 4
+        continue-on-error: true
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list >/dev/null
+          sudo apt-get update -qq -o Dir::Etc::sourcelist="sources.list.d/cloudflare-client.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
+          sudo apt-get install -y -qq --no-install-recommends cloudflare-warp
+          sudo systemctl start warp-svc || true
+          for i in $(seq 1 10); do warp-cli --accept-tos status >/dev/null 2>&1 && break; sleep 1; done
+          warp-cli --accept-tos registration new
+          warp-cli --accept-tos mode proxy
+          warp-cli --accept-tos connect
+          for i in $(seq 1 20); do warp-cli --accept-tos status | grep -q Connected && break; sleep 2; done
+          if curl -s -m 15 -x socks5h://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace | grep -q "warp=on"; then
+            echo "YTDLP_PROXY=socks5://127.0.0.1:40000" >> "$GITHUB_ENV"
+            echo "✓ WARP شغّال"
+          else
+            echo "::warning::WARP ما اشتغل، بنحمّل مباشرة"
+          fi
 
       - name: تحميل وتفريغ وترجمة
         # المدخلات تمر كمتغيرات بيئة (مو داخل السكربت) عشان الأمان

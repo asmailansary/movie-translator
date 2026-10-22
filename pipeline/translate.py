@@ -151,12 +151,32 @@ def download_audio(vid, workdir: Path):
         cookie_file.write_text(YT_COOKIES)
         opts["cookiefile"] = str(cookie_file)
 
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        duration = info.get("duration") or 0
-        if duration and duration > MAX_MINUTES * 60:
-            raise UserError(f"الفلم أطول من الحد المسموح ({MAX_MINUTES} دقيقة).")
-        ydl.download([url])
+    # نجرب أول عن طريق Cloudflare WARP (لو اشتغل)، وبعدها مباشرة
+    routes = [p for p in (os.environ.get("YTDLP_PROXY", "").strip(), "") if p is not None]
+    routes = list(dict.fromkeys(routes))
+    last_err = None
+    for proxy in routes:
+        o = dict(opts)
+        if proxy:
+            o["proxy"] = proxy
+        try:
+            with yt_dlp.YoutubeDL(o) as ydl:
+                info = ydl.extract_info(url, download=False)
+                duration = info.get("duration") or 0
+                if duration and duration > MAX_MINUTES * 60:
+                    raise UserError(f"الفلم أطول من الحد المسموح ({MAX_MINUTES} دقيقة).")
+                ydl.download([url])
+            print("✓ تم التحميل", "عن طريق WARP" if proxy else "مباشرة")
+            break
+        except UserError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            print("✗ فشل التحميل", "عن طريق WARP:" if proxy else "مباشرة:", str(e)[:300])
+            last_err = e
+            for p in workdir.glob("audio.*"):
+                p.unlink(missing_ok=True)
+    else:
+        raise last_err
 
     files = [p for p in workdir.glob("audio.*") if p.suffix != ".part"]
     if not files:
