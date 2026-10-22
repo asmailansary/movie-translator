@@ -327,7 +327,7 @@ button:active{transform:scale(.96);opacity:.85;transition-duration:.08s}
   const api = (p, o = {}) => fetch("/api/admin/" + p, { ...o, headers: { "x-admin-key": key, ...(o.body && !(o.body instanceof FormData) ? { "content-type": "application/json" } : {}), ...(o.headers || {}) } });
   const toast = m => { const t = $("#toast"); t.textContent = m; t.classList.add("on"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2400); };
 
-  const DIALECTS0 = { fusha: "الفصحى", najdi: "نجدية", hijazi: "حجازية", yemeni: "يمنية", egyptian: "مصرية", iraqi: "عراقية" };
+  const DIALECTS0 = { fusha: "الفصحى", najdi: "نجدية", hijazi: "حجازية", yemeni: "يمنية", egyptian: "مصرية", iraqi: "عراقية", moroccan: "مغربية 🇲🇦", libyan: "ليبية 🇱🇾", algerian: "جزائرية 🇩🇿" };
   const dn = k => (val("dialect_names") || {})[k] || DIALECTS0[k];
   const BGS = [["#0d0b09", "بني"], ["#121214", "فحمي"], ["#0f1730", "كحلي"], ["#0b1229", "ليلي"], ["#16112a", "بنفسجي"], ["#1a1020", "توتي"], ["#0b1a17", "زمردي"], ["#0f1419", "رمادي"]];
   const COLORS = ["#e0a84a", "#e8735a", "#d9577b", "#9b7be0", "#4f8ff0", "#2fb4a6", "#5cb85c", "#c9a227"];

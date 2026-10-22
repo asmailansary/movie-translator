@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS = {
   show_social: true,
   show_dub: true,
   show_snap: true,
-  dialects_enabled: ["fusha", "najdi", "hijazi", "yemeni", "egyptian", "iraqi"],
+  dialects_enabled: ["fusha", "najdi", "hijazi", "yemeni", "egyptian", "iraqi", "moroccan", "libyan", "algerian"],
   dialect_names: {},        // أسماء يكتبها الأدمن (مثلاً: نجدية 🇸🇦)
   show_songs: true,         // خانة الأغاني
   splash_video: false,      // فيديو خلف شاشة الافتتاح
@@ -76,6 +76,10 @@ export async function getSettings(env) {
   // لهجات انشالت (الخليجية والشامية) تطيح من الإعدادات القديمة
   value.dialects_enabled = (value.dialects_enabled || []).filter((d) => DIALECT_KEYS.includes(d));
   if (!value.dialects_enabled.length) value.dialects_enabled = [...DIALECT_KEYS];
+  // لهجات جديدة انضافت للأداة: تنفتح لحالها مرة وحدة (والأدمن يقفلها لو يبي)
+  const seen = saved.dialects_seen || ["fusha", "najdi", "hijazi", "khaleeji", "yemeni", "egyptian", "shami", "iraqi"];
+  for (const k of DIALECT_KEYS) if (!seen.includes(k) && !value.dialects_enabled.includes(k)) value.dialects_enabled.push(k);
+  value.dialects_seen = [...DIALECT_KEYS];
   if (!value.dialects_enabled.includes(value.default_dialect)) value.default_dialect = value.dialects_enabled.includes("najdi") ? "najdi" : value.dialects_enabled[0];
   cache = { at: Date.now(), value };
   return value;

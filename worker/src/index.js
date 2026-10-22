@@ -14,7 +14,8 @@ import { getVapid, saveSub, removeSub, notifyAll, validSubscription } from "./pu
 import { WINDOW, systemPrompt, translateLines } from "./edge.js";
 import { adminApi, getSettings, publicSettings, serveIcon, serveManifest, serveTap, serveIntro, personKey, getOwners } from "./admin.js";
 
-const LANGS = { auto: "تلقائي", en: "الإنجليزية", de: "الألمانية", fr: "الفرنسية" };
+const LANGS = { auto: "تلقائي", en: "الإنجليزية 🇬🇧", de: "الألمانية 🇩🇪", fr: "الفرنسية 🇫🇷", es: "الإسبانية 🇪🇸", it: "الإيطالية 🇮🇹",
+  tr: "التركية 🇹🇷", ko: "الكورية 🇰🇷", ja: "اليابانية 🇯🇵", hi: "الهندية 🇮🇳" };
 const DIALECTS = {
   fusha: { name: "الفصحى", group: "fusha" },
   najdi: { name: "نجدية", group: "dialect" },
@@ -22,6 +23,9 @@ const DIALECTS = {
   yemeni: { name: "يمنية", group: "dialect" },
   egyptian: { name: "مصرية", group: "dialect" },
   iraqi: { name: "عراقية", group: "dialect" },
+  moroccan: { name: "مغربية 🇲🇦", group: "dialect" },
+  libyan: { name: "ليبية 🇱🇾", group: "dialect" },
+  algerian: { name: "جزائرية 🇩🇿", group: "dialect" },
 };
 
 // أسماء اللهجات اللي يكتبها الأدمن (مع الأعلام) تطلع للمستخدم، والترجمة تستخدم الاسم الأصلي

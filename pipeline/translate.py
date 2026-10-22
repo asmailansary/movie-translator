@@ -42,7 +42,7 @@ CALLBACK = os.environ.get("CALLBACK", "").strip().rstrip("/")
 INGEST_SECRET = os.environ.get("INGEST_SECRET", "").strip()
 REUSE = os.environ.get("REUSE", "0").strip() == "1"   # الكلام الأصلي جاهز من قبل: نترجم بس
 MEDIA_URL = os.environ.get("MEDIA_URL", "").strip()   # مقطع تيك توك/انستا (غير يوتيوب)
-BG_ORDER = ["najdi", "fusha", "hijazi", "yemeni", "egyptian", "iraqi"]
+BG_ORDER = ["najdi", "fusha", "hijazi", "yemeni", "egyptian", "iraqi", "moroccan", "libyan", "algerian"]
 
 # Groq يرفض الطلبات اللي توقيعها Python-urllib (خطأ 1010)، فنعرّف نفسنا باسم واضح
 UA = "movie-translator/1.0 (+https://github.com/asmailansary/movie-translator)"
@@ -56,6 +56,12 @@ SOURCE_LANGS = {
     "en": {"name": "الإنجليزية", "code": "en"},
     "de": {"name": "الألمانية", "code": "de"},
     "fr": {"name": "الفرنسية", "code": "fr"},
+    "es": {"name": "الإسبانية", "code": "es"},
+    "it": {"name": "الإيطالية", "code": "it"},
+    "tr": {"name": "التركية", "code": "tr"},
+    "ko": {"name": "الكورية", "code": "ko"},
+    "ja": {"name": "اليابانية", "code": "ja"},
+    "hi": {"name": "الهندية", "code": "hi"},
 }
 
 def _load_dialects():
