@@ -40,7 +40,7 @@ jobs:
         run: |
           CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 20 -X POST "$CALLBACK/api/ingest/$JOB_ID" \
             -H "Content-Type: application/json" -H "X-Ingest-Secret: $INGEST_SECRET" \
-            -d '{"status":"running","stage":"GitHub بدأ… يجهّز الأدوات","progress":0.02}' || true)
+            -d '{"status":"running","stage":"بدأنا نجهّز الفلم 🎬","progress":0.02}' || true)
           echo "::notice::start report HTTP $CODE"
 
       - uses: actions/checkout@v4

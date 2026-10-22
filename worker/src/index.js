@@ -11,6 +11,8 @@
  *   INGEST_SECRET  كلمة سر بين GitHub و Cloudflare (نفسها في الجهتين)
  */
 
+import { getVapid, saveSub, removeSub, notifyAll, validSubscription } from "./push.js";
+
 const LANGS = { auto: "تلقائي", en: "الإنجليزية", de: "الألمانية", fr: "الفرنسية" };
 const DIALECTS = {
   fusha: { name: "الفصحى", group: "fusha" },
@@ -95,10 +97,10 @@ function checkTimeouts(job) {
   const now = Date.now();
   if (job.status === "queued" && now - job.created > START_TIMEOUT) {
     job.status = "error";
-    job.error = "GitHub ما بدأ الترجمة. تأكد من مفتاح GH_TOKEN ومن صفحة Actions في المستودع.";
+    job.error = "الفلم ما بدأ يتجهز 😕 جرّب مرة ثانية، وإذا تكرر فيه مشكلة في إعدادات الأداة 🛠️";
   } else if (job.status === "running" && now - (job.updated || job.created) > STALL_TIMEOUT) {
     job.status = "error";
-    job.error = "الترجمة توقفت بالنص. جرّب مرة ثانية.";
+    job.error = "الترجمة وقفت بالنص 😕 جرّب مرة ثانية";
   }
   return job;
 }
@@ -131,16 +133,16 @@ async function dispatch(env, job, origin) {
   if (r.status !== 204) {
     const t = (await r.text()).slice(0, 200);
     console.log("dispatch failed", r.status, t);
-    if (r.status === 401 || r.status === 403) return "مفتاح GitHub (GH_TOKEN) غير صحيح أو ما عنده صلاحية Actions.";
-    if (r.status === 404) return "ما لقيت المستودع أو ملف translate.yml. تأكد من GH_REPO ومن صلاحيات المفتاح.";
-    return `GitHub رفض تشغيل الترجمة (HTTP ${r.status}).`;
+    if (r.status === 401 || r.status === 403) return "فيه مشكلة في إعدادات الأداة 🛠️ (مفتاح التشغيل)";
+    if (r.status === 404) return "فيه مشكلة في إعدادات الأداة 🛠️ (ملف التشغيل)";
+    return `ما قدرنا نبدأ تجهيز الفلم 😕 (${r.status}) جرّب بعد شوي`;
   }
   return null;
 }
 
 async function createJob(request, env) {
   if (!env.APP_PASSWORD || !env.GH_TOKEN || !env.INGEST_SECRET)
-    return json({ error: "الأداة ناقصها إعدادات (APP_PASSWORD / GH_TOKEN / INGEST_SECRET)." }, 503);
+    return json({ error: "الأداة ناقصها إعدادات 🛠️" }, 503);
   if (!(await safeEqual(request.headers.get("x-app-password") || "", env.APP_PASSWORD))) {
     await sleep(800);
     return json({ error: "كلمة المرور غير صحيحة." }, 401);
@@ -163,7 +165,7 @@ async function createJob(request, env) {
     const id = newId();
     await putJSON(env, jobKey(id), {
       id, video_id: vid, source, dialect, status: "done", cached: true,
-      stage: "جاهزة (محفوظة من قبل) ✓", progress: 1, ready_until: 1e9,
+      stage: "جاهز ✓ ترجمته من قبل 🎬", progress: 1, ready_until: 1e9,
       title: cached.customMetadata?.title || "", created: Date.now(), updated: Date.now(),
     });
     return json({ job_id: id, video_id: vid });
@@ -181,7 +183,7 @@ async function createJob(request, env) {
   const id = newId();
   const job = {
     id, video_id: vid, source, dialect, status: "queued",
-    stage: "بانتظار GitHub يبدأ… (قرابة دقيقة)", progress: 0.01,
+    stage: "نجهّز لك الفلم… 🍿", progress: 0.01,
     title: "", duration: 0, ready_until: 0, error: null, segments: [],
     created: Date.now(), updated: Date.now(),
   };
@@ -228,14 +230,14 @@ async function getJob(request, env, id, wantSrt) {
   const since = Math.max(0, parseInt(new URL(request.url).searchParams.get("since") || "0", 10) || 0);
   const segs = job.segments || [];
   return json({
-    video_id: job.video_id, status: job.status, stage: job.status === "error" ? job.error : job.stage,
+    video_id: job.video_id, source: job.source, dialect: job.dialect, status: job.status, stage: job.status === "error" ? job.error : job.stage,
     progress: job.progress || 0, title: job.title || "", duration: job.duration || 0,
     error: job.error || null, ready_until: job.ready_until || 0,
     total: segs.length, since, segments: segs.slice(since),
   });
 }
 
-async function ingest(request, env, id) {
+async function ingest(request, env, id, ctx) {
   if (!(await safeEqual(request.headers.get("x-ingest-secret") || "", env.INGEST_SECRET)))
     return json({ error: "unauthorized" }, 401);
   const job = await getJSON(env, jobKey(id));
@@ -253,6 +255,18 @@ async function ingest(request, env, id) {
 
   if (job.status === "done" || job.status === "error")
     await env.BUCKET.delete(activeKey(job.video_id, job.source, job.dialect));
+  // إشعار: أول ما يصير الفلم جاهز للمشاهدة (أو لو صار خطأ)
+  const watchable = job.segments.length > 0;
+  if ((watchable || job.status === "error") && !job.notified) {
+    job.notified = true;
+    await putJSON(env, jobKey(id), job);
+    const name = job.title ? `«${job.title.slice(0, 60)}»` : "فلمك";
+    const msg = job.status === "error"
+      ? { title: "صار شي بالفلم 😕", body: `${name} ما ضبط معنا، افتح الأداة وشوف وش السالفة`, url: `/?job=${id}` }
+      : { title: "فلمك جاهز 🍿", body: `${name} صار جاهز بالترجمة، يلا نبدأ؟ 🎬`, url: `/?job=${id}` };
+    const origin = new URL(request.url).origin;
+    ctx.waitUntil(notifyAll(env, msg, origin).catch((e) => console.log("notify", e)));
+  }
   if (job.status === "done") {
     await env.BUCKET.put(
       subsKey(job.video_id, job.source, job.dialect),
@@ -313,6 +327,30 @@ async function favorites(request, env, key) {
   return json({ error: "غير مدعوم" }, 405);
 }
 
+
+async function pushApi(request, env, action) {
+  const denied = await requireAuth(request, env);
+  if (denied) return denied;
+  if (action === "key" && request.method === "GET") return json({ key: (await getVapid(env)).publicKey });
+  if (request.method !== "POST") return json({ error: "غير مدعوم" }, 405);
+  let b;
+  try { b = JSON.parse((await request.text()).slice(0, 4000) || "{}"); } catch { return json({ error: "طلب غير صالح." }, 400); }
+  if (action === "subscribe") {
+    if (!validSubscription(b.subscription || {})) return json({ error: "اشتراك غير صالح." }, 400);
+    await saveSub(env, b.subscription);
+    return json({ ok: true });
+  }
+  if (action === "unsubscribe") {
+    await removeSub(env, String(b.endpoint || ""));
+    return json({ ok: true });
+  }
+  if (action === "test") {
+    const n = await notifyAll(env, { title: "التنبيهات شغّالة ✅", body: "كذا بيوصلك خبر أول ما يجهز فلمك 🍿", url: "/" }, new URL(request.url).origin);
+    return json({ ok: true, sent: n });
+  }
+  return json({ error: "غير موجود" }, 404);
+}
+
 export function toSrt(segments) {
   const ts = (t) => {
     let ms = Math.round(t * 1000);
@@ -333,7 +371,7 @@ export function toSrt(segments) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     try {
@@ -348,7 +386,9 @@ export default {
       let m = path.match(/^\/api\/jobs\/([a-f0-9]{12})(\/srt)?$/);
       if (m && request.method === "GET") return getJob(request, env, m[1], Boolean(m[2]));
       m = path.match(/^\/api\/ingest\/([a-f0-9]{12})$/);
-      if (m && request.method === "POST") return ingest(request, env, m[1]);
+      if (m && request.method === "POST") return ingest(request, env, m[1], ctx);
+      m = path.match(/^\/api\/push\/(key|subscribe|unsubscribe|test)$/);
+      if (m) return pushApi(request, env, m[1]);
       m = path.match(/^\/api\/favorites(?:\/([A-Za-z0-9_-]{11}__[a-z]+__[a-z]+))?$/);
       if (m) return favorites(request, env, m[1]);
       if (path.startsWith("/api/")) return json({ error: "غير موجود" }, 404);

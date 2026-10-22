@@ -177,7 +177,7 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None):
                 info = ydl.extract_info(url, download=False)
                 duration = info.get("duration") or 0
                 if duration and duration > MAX_MINUTES * 60:
-                    raise UserError(f"الفلم أطول من الحد المسموح ({MAX_MINUTES} دقيقة).")
+                    raise UserError(f"الفلم طويل مرة 😅 أطول من {MAX_MINUTES // 60} ساعات")
                 ydl.download([url])
             print("✓ تم التحميل", stem, "عن طريق WARP" if proxy else "مباشرة")
             _ROUTE["proxy"] = proxy
@@ -196,7 +196,7 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None):
 
     files = [p for p in workdir.glob(f"{stem}.*") if p.suffix not in (".part", ".ytdl")]
     if not files:
-        raise UserError("ما قدرت أحمّل صوت الفلم من يوتيوب.")
+        raise UserError("ما قدرنا نجيب صوت الفلم 😕 جرّب مرة ثانية")
     return files[0], info.get("title") or "", info.get("duration") or 0
 
 
@@ -260,7 +260,7 @@ def http_json(url, headers, body: bytes, timeout=300, retries=4, service=""):
             last = f"HTTP {e.code}: {detail}"
             if e.code in (401, 403):
                 print(f"::warning::{service} HTTP {e.code}: {detail[:250]}")
-                raise UserError(f"مفتاح {service or 'الخدمة'} غير صحيح أو ما له صلاحية (HTTP {e.code}). راجع سر {SECRET_NAMES.get(service, '')} في GitHub.")
+                raise UserError(f"فيه مشكلة في إعدادات الأداة 🛠️ (مفتاح {service or 'خدمة'})")
             if e.code in (429, 500, 502, 503, 504, 529):
                 wait = float(e.headers.get("retry-after") or (5 * (attempt + 1)))
                 time.sleep(min(wait, 60))
@@ -409,7 +409,7 @@ def call_llm(system, user_text):
         except Exception as e:  # noqa: BLE001
             print(f"[{name}] فشل، أجرب اللي بعده:", str(e)[:200])
             last = e
-    raise last or UserError("ما فيه أي مفتاح ترجمة.")
+    raise last or UserError("فيه مشكلة في إعدادات الأداة 🛠️ (الترجمة)")
 
 
 _gemini_model = {"name": GEMINI_MODEL}
@@ -432,7 +432,7 @@ def pick_gemini_model():
             detail = e.read().decode("utf-8", "ignore")[:250]
             print(f"::warning::Gemini models HTTP {e.code}: {detail}")
             if e.code in (400, 401, 403):
-                raise UserError(f"مفتاح Gemini غير صحيح أو ما له صلاحية (HTTP {e.code}). راجع سر GEMINI_API_KEY في GitHub.")
+                raise UserError("فيه مشكلة في إعدادات الأداة 🛠️ (مفتاح Gemini)")
             raise
         bad = ("lite", "image", "tts", "live", "audio", "embed", "exp", "preview", "thinking", "8b")
         names = [m["name"].split("/", 1)[1] for m in models
@@ -571,7 +571,7 @@ def validate_inputs():
     if not INGEST_SECRET:
         sys.exit("INGEST_SECRET ناقص")
     if not GROQ_API_KEY:
-        raise UserError("مفتاح GROQ_API_KEY ناقص في أسرار GitHub.")
+        raise UserError("فيه مشكلة في إعدادات الأداة 🛠️ (مفتاح الصوت)")
     if not (GEMINI_API_KEY or ANTHROPIC_API_KEY):
         print("ℹ️  ما فيه GEMINI_API_KEY — الترجمة بتكون عن طريق Groq (جودة اللهجات أقل).")
 
@@ -579,12 +579,12 @@ def validate_inputs():
 # ───────────────────────── تشغيل المهمة كاملة ─────────────────────────
 def run():
     workdir = Path(tempfile.mkdtemp(prefix="mt_"))
-    report(status="running", stage="سحب صوت الفلم…", progress=0.03)
+    report(status="running", stage="نسحب صوت الفلم 🎧", progress=0.03)
 
     # ١) نسحب الصوت بس (بدون فيديو) — سريع حتى لفلم ساعتين
     audio, title, duration = download_audio(VIDEO_ID, workdir, stem="audio")
     total = max(1, -(-int(duration or CHUNK_SECONDS) // CHUNK_SECONDS))
-    report(title=title, duration=duration, stage="تفريغ وترجمة أول جزء…", progress=0.06)
+    report(title=title, duration=duration, stage="نسمع أول ١٠ دقايق ونترجمها ✍️", progress=0.06)
 
     system = build_system_prompt(DIALECT, title)
     lang = SOURCE_LANGS[SOURCE]["code"]
@@ -643,12 +643,12 @@ def run():
         done_chunks += 1
         report(
             append=segs,
-            stage=f"ترجمة… ({done_chunks} من {total})",
+            stage=("أول جزء جاهز! تقدر تبدأ 🍿 والباقي يكمل وانت تتفرج" if done_chunks == 1 and total > 1 else f"نترجم الباقي ☕ ({done_chunks} من {total})"),
             progress=round(0.06 + 0.92 * min(done_chunks, total) / total, 3),
             ready_until=chunk_end,
         )
     pool.shutdown()
-    report(status="done", stage="خلصت الترجمة ✓", progress=1.0, ready_until=10**9)
+    report(status="done", stage="الفلم كله جاهز ✓ استمتع 🎬", progress=1.0, ready_until=10**9)
 
 
 def friendly_error(e):
@@ -656,10 +656,10 @@ def friendly_error(e):
     if isinstance(e, UserError):
         return msg
     if "Sign in to confirm" in msg or "not a bot" in msg:
-        return "يوتيوب منع GitHub من تحميل الفلم (يحسبه روبوت). شوف قسم «الكوكيز» في الدليل."
+        return "يوتيوب ما رضى يعطينا هالفلم الحين 😕 جرّب بعد شوي أو جرّب فلم ثاني"
     if "Private video" in msg or "Video unavailable" in msg:
-        return "الفلم خاص أو غير متاح."
-    return "صار خطأ أثناء المعالجة: " + msg[:300]
+        return "هالفلم خاص أو محذوف من يوتيوب 🚫"
+    return "صار شي غلط وحنا نجهّز الفلم 😕 جرّب مرة ثانية"
 
 
 def main():
