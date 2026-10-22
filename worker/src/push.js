@@ -6,7 +6,7 @@
 
 const enc = new TextEncoder();
 const VAPID_KEY = "push/vapid.json";
-const SUBS_KEY = "push/subs.json";
+const subsKey = (dev) => `users/${dev}/subs.json`;
 
 export const b64u = {
   encode(buf) {
@@ -96,25 +96,26 @@ export function validSubscription(sub) {
   }
 }
 
-export async function listSubs(env) {
-  const obj = await env.BUCKET.get(SUBS_KEY);
+export async function listSubs(env, dev) {
+  const obj = await env.BUCKET.get(subsKey(dev));
   return obj ? obj.json() : [];
 }
 
-export async function saveSub(env, sub) {
-  const subs = (await listSubs(env)).filter((s) => s.endpoint !== sub.endpoint);
+export async function saveSub(env, sub, dev) {
+  const subs = (await listSubs(env, dev)).filter((s) => s.endpoint !== sub.endpoint);
   subs.unshift({ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, added: Date.now() });
-  await env.BUCKET.put(SUBS_KEY, JSON.stringify(subs.slice(0, 10)));
+  await env.BUCKET.put(subsKey(dev), JSON.stringify(subs.slice(0, 5)));
 }
 
-export async function removeSub(env, endpoint) {
-  const subs = (await listSubs(env)).filter((s) => s.endpoint !== endpoint);
-  await env.BUCKET.put(SUBS_KEY, JSON.stringify(subs));
+export async function removeSub(env, endpoint, dev) {
+  const subs = (await listSubs(env, dev)).filter((s) => s.endpoint !== endpoint);
+  await env.BUCKET.put(subsKey(dev), JSON.stringify(subs));
 }
 
-/** يرسل إشعار لكل الأجهزة المشتركة، ويشيل الأجهزة اللي ألغت الاشتراك */
-export async function notifyAll(env, message, subject) {
-  const subs = await listSubs(env);
+/** يرسل إشعار لأجهزة معيّنة بس (صاحب الفلم)، ويشيل الاشتراكات الملغية */
+export async function notifyAll(env, message, subject, devices) {
+  const subs = [];
+  for (const dev of new Set(devices || [])) for (const s of await listSubs(env, dev)) subs.push({ ...s, dev });
   if (!subs.length) return 0;
   const vapid = await getVapid(env);
   const payload = JSON.stringify(message);
@@ -134,13 +135,13 @@ export async function notifyAll(env, message, subject) {
         },
         body,
       });
-      if (r.status === 404 || r.status === 410) dead.push(s.endpoint);
+      if (r.status === 404 || r.status === 410) dead.push([s.endpoint, s.dev]);
       else if (r.ok) sent++;
       else console.log("push failed", r.status, (await r.text()).slice(0, 200));
     } catch (e) {
       console.log("push error", e && e.message);
     }
   }));
-  for (const ep of dead) await removeSub(env, ep);
+  for (const [ep, dev] of dead) await removeSub(env, ep, dev);
   return sent;
 }

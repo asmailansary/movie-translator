@@ -6,7 +6,6 @@
  * - يعطي الصفحة الترجمة الجاهزة
  *
  * الأسرار المطلوبة (Settings → Variables and Secrets):
- *   APP_PASSWORD   كلمة مرور الأداة
  *   GH_TOKEN       مفتاح GitHub يقدر يشغّل Actions في مستودع الأداة
  *   INGEST_SECRET  كلمة سر بين GitHub و Cloudflare (نفسها في الجهتين)
  */
@@ -141,13 +140,35 @@ async function dispatch(env, job, origin) {
   return null;
 }
 
+// ───────── هوية الجهاز (بدل كلمة المرور) ─────────
+// كل جهاز له رمز عشوائي طويل محفوظ عنده، فمحفوظته وإشعاراته له بس
+const DEV_RE = /^[A-Za-z0-9_-]{22,64}$/;
+const deviceOf = (request) => {
+  const d = request.headers.get("x-device") || "";
+  return DEV_RE.test(d) ? d : null;
+};
+const userKey = (dev, name) => `users/${dev}/${name}`;
+const noDevice = () => json({ error: "حدّث الصفحة وجرّب مرة ثانية 🔄" }, 400);
+
+// حد يومي عشان ما تنتهي الحدود المجانية لو انتشر الرابط
+async function checkLimit(env, dev) {
+  const perDevice = parseInt(env.DAILY_PER_DEVICE || "8", 10);
+  const all = parseInt(env.DAILY_TOTAL || "30", 10);
+  const key = `limits/${new Date().toISOString().slice(0, 10)}.json`;
+  const l = (await getJSON(env, key)) || { total: 0, devices: {} };
+  if ((l.devices[dev] || 0) >= perDevice) return `وصلت حدك اليوم (${perDevice} أفلام جديدة) 😅 ارجع بكرة، والأفلام المترجمة من قبل تفتح عادي`;
+  if (l.total >= all) return "الأداة وصلت حدها اليوم 😅 ارجع بكرة، والأفلام المترجمة من قبل تفتح عادي";
+  l.total++;
+  l.devices[dev] = (l.devices[dev] || 0) + 1;
+  await putJSON(env, key, l);
+  return null;
+}
+
 async function createJob(request, env) {
-  if (!env.APP_PASSWORD || !env.GH_TOKEN || !env.INGEST_SECRET)
+  if (!env.GH_TOKEN || !env.INGEST_SECRET)
     return json({ error: "الأداة ناقصها إعدادات 🛠️" }, 503);
-  if (!(await safeEqual(request.headers.get("x-app-password") || "", env.APP_PASSWORD))) {
-    await sleep(800);
-    return json({ error: "كلمة المرور غير صحيحة." }, 401);
-  }
+  const dev = deviceOf(request);
+  if (!dev) return noDevice();
   let body;
   try {
     body = JSON.parse((await request.text()).slice(0, 10000) || "{}");
@@ -177,15 +198,24 @@ async function createJob(request, env) {
   if (activeObj) {
     const activeId = await activeObj.text();
     const existing = await getJSON(env, jobKey(activeId));
-    if (existing && ["queued", "running"].includes(checkTimeouts(existing).status))
+    if (existing && ["queued", "running"].includes(checkTimeouts(existing).status)) {
+      if (!existing.owners?.includes(dev)) {   // جهاز ثاني ينتظر نفس الفلم: نعلمه بعد
+        existing.owners = [...(existing.owners || []), dev].slice(-20);
+        await putJSON(env, jobKey(activeId), existing);
+      }
       return json({ job_id: activeId, video_id: vid });
+    }
   }
 
   // الفلم مسموع من قبل بلهجة ثانية؟ نترجم بس، بدون سحب الصوت من جديد
   const reuse = await findTranscript(env, vid);
+  if (!reuse) {   // الحد اليومي على الأفلام الجديدة بس (تبديل اللهجة ما يُحسب)
+    const limited = await checkLimit(env, dev);
+    if (limited) return json({ error: limited }, 429);
+  }
   const id = newId();
   const job = {
-    id, video_id: vid, source, dialect, status: "queued", reuse,
+    id, video_id: vid, source, dialect, status: "queued", reuse, owners: [dev],
     stage: reuse ? `نترجم ${dialect === "fusha" ? "بالفصحى" : "باللهجة ال" + DIALECTS[dialect].name} ⚡` : "نجهّز لك الفلم… 🍿", progress: 0.01,
     title: "", duration: 0, ready_until: 0, error: null, segments: [],
     created: Date.now(), updated: Date.now(),
@@ -234,10 +264,6 @@ async function loadJob(env, id) {
 }
 
 async function getJob(request, env, id, wantSrt) {
-  if (!(await safeEqual(request.headers.get("x-app-password") || "", env.APP_PASSWORD))) {
-    await sleep(800);
-    return json({ error: "كلمة المرور غير صحيحة." }, 401);
-  }
   const job = await loadJob(env, id);
   if (!job) return json({ error: "المهمة غير موجودة." }, 404);
   if (wantSrt) {
@@ -287,7 +313,7 @@ async function ingest(request, env, id, ctx) {
       ? { title: "صار شي بالفلم 😕", body: `${name} ما ضبط معنا، افتح الأداة وشوف وش السالفة`, url: `/?job=${id}` }
       : { title: "فلمك جاهز 🍿", body: `${name} صار جاهز بالترجمة، يلا نبدأ؟ 🎬`, url: `/?job=${id}` };
     const origin = new URL(request.url).origin;
-    ctx.waitUntil(notifyAll(env, msg, origin).catch((e) => console.log("notify", e)));
+    ctx.waitUntil(notifyAll(env, msg, origin, job.owners || []).catch((e) => console.log("notify", e)));
   }
   if (job.status === "done") {
     await env.BUCKET.put(
@@ -301,16 +327,15 @@ async function ingest(request, env, id, ctx) {
 
 
 // ───────── المحفوظة (القلب) ─────────
-async function requireAuth(request, env) {
-  if (await safeEqual(request.headers.get("x-app-password") || "", env.APP_PASSWORD)) return null;
-  await sleep(800);
-  return json({ error: "كلمة المرور غير صحيحة." }, 401);
-}
-
 async function favorites(request, env, key) {
-  const denied = await requireAuth(request, env);
-  if (denied) return denied;
-  const favs = (await getJSON(env, FAVS_KEY)) || {};
+  const dev = deviceOf(request);
+  if (!dev) return noDevice();
+  const myKey = userKey(dev, "favorites.json");
+  let favs = await getJSON(env, myKey);
+  if (!favs) {   // نقل المحفوظة القديمة (أيام كلمة المرور) لأول جهاز يفتح بعد التحديث
+    favs = (await getJSON(env, FAVS_KEY)) || {};
+    if (Object.keys(favs).length) { await putJSON(env, myKey, favs); await env.BUCKET.delete(FAVS_KEY); }
+  }
   if (request.method === "GET") {
     const list = Object.values(favs).sort((a, b) => (b.updated || 0) - (a.updated || 0));
     return json({ favorites: list });
@@ -318,7 +343,7 @@ async function favorites(request, env, key) {
   if (request.method === "DELETE") {
     if (!key || !favs[key]) return json({ error: "غير موجود" }, 404);
     delete favs[key];
-    await putJSON(env, FAVS_KEY, favs);
+    await putJSON(env, myKey, favs);
     return json({ ok: true });
   }
   if (request.method === "POST") {
@@ -343,7 +368,7 @@ async function favorites(request, env, key) {
       added: old.added || Date.now(), updated: Date.now(),
     };
     if (Object.keys(favs).length > 300) return json({ error: "وصلت الحد (300 فلم محفوظ)." }, 400);
-    await putJSON(env, FAVS_KEY, favs);
+    await putJSON(env, myKey, favs);
     return json({ ok: true, saved: true, favorite: favs[k] });
   }
   return json({ error: "غير مدعوم" }, 405);
@@ -351,23 +376,23 @@ async function favorites(request, env, key) {
 
 
 async function pushApi(request, env, action) {
-  const denied = await requireAuth(request, env);
-  if (denied) return denied;
+  const dev = deviceOf(request);
+  if (!dev) return noDevice();
   if (action === "key" && request.method === "GET") return json({ key: (await getVapid(env)).publicKey });
   if (request.method !== "POST") return json({ error: "غير مدعوم" }, 405);
   let b;
   try { b = JSON.parse((await request.text()).slice(0, 4000) || "{}"); } catch { return json({ error: "طلب غير صالح." }, 400); }
   if (action === "subscribe") {
     if (!validSubscription(b.subscription || {})) return json({ error: "اشتراك غير صالح." }, 400);
-    await saveSub(env, b.subscription);
+    await saveSub(env, b.subscription, dev);
     return json({ ok: true });
   }
   if (action === "unsubscribe") {
-    await removeSub(env, String(b.endpoint || ""));
+    await removeSub(env, String(b.endpoint || ""), dev);
     return json({ ok: true });
   }
   if (action === "test") {
-    const n = await notifyAll(env, { title: "التنبيهات شغّالة ✅", body: "كذا بيوصلك خبر أول ما يجهز فلمك 🍿", url: "/" }, new URL(request.url).origin);
+    const n = await notifyAll(env, { title: "التنبيهات شغّالة ✅", body: "كذا بيوصلك خبر أول ما يجهز فلمك 🍿", url: "/" }, new URL(request.url).origin, [dev]);
     return json({ ok: true, sent: n });
   }
   return json({ error: "غير موجود" }, 404);
@@ -402,7 +427,7 @@ export default {
         return json({
           languages: LANGS,
           dialects: DIALECTS,
-          ready: Boolean(env.APP_PASSWORD && env.GH_TOKEN && env.INGEST_SECRET && env.BUCKET),
+          ready: Boolean(env.GH_TOKEN && env.INGEST_SECRET && env.BUCKET),
         });
       if (path === "/api/jobs" && request.method === "POST") return createJob(request, env);
       let m = path.match(/^\/api\/jobs\/([a-f0-9]{12})(\/srt)?$/);

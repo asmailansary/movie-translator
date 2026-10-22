@@ -180,6 +180,11 @@ body.cinema .not-cinema{display:none!important}
 .fav .del{flex:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);color:var(--muted);display:grid;place-items:center}
 .fav .del svg{width:18px;height:18px}
 .empty{color:var(--muted);font-size:13px;margin:0}
+.move{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.move summary{font-size:13px;color:var(--muted);cursor:pointer}
+.mv{display:flex;gap:8px;margin-top:8px}
+.mv input{font-size:13px;padding:9px 10px}
+.mv .btn2{flex:none;font-size:13px;padding:8px 12px}
 </style>
 </head>
 <body>
@@ -235,10 +240,6 @@ body.cinema .not-cinema{display:none!important}
         <label class="t">اللهجة</label>
         <div class="chips" id="dialects"></div>
       </div>
-      <div>
-        <label class="t" for="pw">كلمة المرور</label>
-        <input id="pw" type="password" placeholder="كلمة مرور الأداة" required>
-      </div>
     </div>
     <button class="go" id="goBtn" type="submit">ترجم وشغّل 🎬</button>
     <p class="note err hidden" id="formErr"></p>
@@ -246,7 +247,12 @@ body.cinema .not-cinema{display:none!important}
 
   <section class="card favs" id="favBox">
     <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 4.3 2.4h2c.7-1.3 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg> المحفوظة</h2>
-    <div id="favList"><p class="empty">اكتب كلمة المرور فوق عشان تطلع أفلامك المحفوظة.</p></div>
+    <div id="favList"><p class="empty">…</p></div>
+    <details class="move"><summary>🔁 انقل محفوظتك لجوال أو متصفح ثاني</summary>
+      <p class="note" style="margin-top:6px">هذا رمز جهازك. انسخه وحطه في الجهاز الثاني، أو الصق رمز جهاز ثاني هنا عشان تطلع محفوظته عندك.</p>
+      <div class="mv"><input id="devCode" readonly dir="ltr"><button class="btn2" type="button" id="copyDev">نسخ</button></div>
+      <div class="mv"><input id="devIn" dir="ltr" placeholder="الصق الرمز هنا"><button class="btn2" type="button" id="useDev">استخدم</button></div>
+    </details>
   </section>
 
   <section id="watch" class="hidden">
@@ -341,8 +347,10 @@ body.cinema .not-cinema{display:none!important}
     get(k, d) { try { const v = localStorage.getItem("mt_" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
     set(k, v) { try { localStorage.setItem("mt_" + k, JSON.stringify(v)); } catch {} }
   };
-  const pw = () => store.get("pw", "");
-  const api = (path, opts = {}) => fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-App-Password": pw(), ...(opts.headers || {}) } });
+  // رمز الجهاز: عشوائي وطويل، ينحفظ في الجوال (بديل كلمة المرور)
+  const newDev = () => { const b = crypto.getRandomValues(new Uint8Array(24)); return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+  let device = store.get("dev", ""); if (!/^[A-Za-z0-9_-]{22,64}$/.test(device)) { device = newDev(); store.set("dev", device); }
+  const api = (path, opts = {}) => fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-Device": device, ...(opts.headers || {}) } });
   const fmt = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
     return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -388,10 +396,16 @@ body.cinema .not-cinema{display:none!important}
     setDialect(g === "fusha" ? "fusha" : store.get("lastDialect", "najdi"));
   });
 
-  $("#pw").value = pw();
-  $("#pw").addEventListener("change", () => { store.set("pw", $("#pw").value.trim()); loadFavs(); });
+  $("#devCode").value = device;
+  $("#copyDev").onclick = async () => { try { await navigator.clipboard.writeText(device); $("#copyDev").textContent = "تم ✓"; } catch { $("#devCode").select(); } };
+  $("#useDev").onclick = () => {
+    const v = $("#devIn").value.trim();
+    if (!/^[A-Za-z0-9_-]{22,64}$/.test(v)) return alert("الرمز غير صحيح 🤔");
+    if (!confirm("بتطلع محفوظة الجهاز الثاني هنا بدل محفوظتك الحالية. أكيد؟")) return;
+    device = v; store.set("dev", v); $("#devCode").value = v; $("#devIn").value = ""; loadFavs();
+  };
   function showErr(m) { const e = $("#formErr"); e.textContent = m; e.classList.toggle("hidden", !m); }
-  const friendly = (status, msg) => status === 401 ? "كلمة المرور غلط 🔒" : (msg || "صار شي غلط 😕 جرّب مرة ثانية");
+  const friendly = (status, msg) => msg || "صار شي غلط 😕 جرّب مرة ثانية";
 
   // ───── بدء الترجمة
   async function requestJob(vid, src, dia) {
@@ -414,7 +428,6 @@ body.cinema .not-cinema{display:none!important}
   }
   $("#form").addEventListener("submit", e => {
     e.preventDefault();
-    store.set("pw", $("#pw").value.trim());
     start($("#url").value, lang, dialect, 0);
   });
 
@@ -435,7 +448,7 @@ body.cinema .not-cinema{display:none!important}
   // من رابط الإشعار
   async function openFromUrl(url) {
     const q = new URL(url || location.href).searchParams.get("job");
-    if (!q || !/^[a-f0-9]{12}$/.test(q) || !pw()) return;
+    if (!q || !/^[a-f0-9]{12}$/.test(q)) return;
     try {
       const r = await api(`/api/jobs/${q}?since=999999`); const d = await r.json();
       if (!r.ok || !d.video_id) return history.replaceState(null, "", "/");
@@ -681,10 +694,9 @@ body.cinema .not-cinema{display:none!important}
     $("#heartBtn span").textContent = on ? "محفوظ" : "حفظ";
   }
   async function loadFavs() {
-    if (!pw()) return;
     try {
       const r = await api("/api/favorites"); const d = await r.json();
-      if (!r.ok) { $("#favList").innerHTML = `<p class="empty">${r.status === 401 ? "كلمة المرور غلط 🔒" : "ما قدرنا نجيب المحفوظة 😕"}</p>`; return; }
+      if (!r.ok) { $("#favList").innerHTML = '<p class="empty">ما قدرنا نجيب المحفوظة 😕</p>'; return; }
       favs = d.favorites || []; renderFavs();
     } catch {}
   }
@@ -700,7 +712,7 @@ body.cinema .not-cinema{display:none!important}
       const mini = document.createElement("div"); mini.className = "mini";
       const bar = document.createElement("i"); bar.style.width = (f.duration ? Math.min(100, f.position / f.duration * 100) : 0) + "%"; mini.append(bar);
       open.append(tt, sm, mini);
-      open.onclick = () => { if (!pw()) return showErr("اكتب كلمة المرور أول 🔒"); start("https://youtu.be/" + f.video_id, f.source, f.dialect, f.position); };
+      open.onclick = () => { start("https://youtu.be/" + f.video_id, f.source, f.dialect, f.position); };
       const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.setAttribute("aria-label", "حذف");
       del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
       del.onclick = async () => {
@@ -742,7 +754,6 @@ body.cinema .not-cinema{display:none!important}
   async function enablePush(errEl) {
     errEl && errEl.classList.add("hidden");
     try {
-      if (!pw()) throw new Error("اكتب كلمة المرور أول 🔒");
       const perm = await Notification.requestPermission();
       if (perm !== "granted") throw new Error("ما سمحت بالتنبيهات 😅 تقدر تفعّلها من إعدادات الآيفون ← مترجم الأفلام ← الإشعارات");
       const reg = await navigator.serviceWorker.register("/sw.js");
