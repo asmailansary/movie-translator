@@ -182,7 +182,9 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None):
         except UserError:
             raise
         except Exception as e:  # noqa: BLE001
-            print("✗ فشل التحميل", "عن طريق WARP:" if proxy else "مباشرة:", str(e)[:300])
+            msg = str(e).replace("\n", " ")[:300]
+            print("✗ فشل التحميل", "عن طريق WARP:" if proxy else "مباشرة:", msg)
+            print(f"::warning::download {'warp' if proxy else 'direct'} {stem}: {msg}")
             last_err = e
             for p in workdir.glob(f"{stem}.*"):
                 p.unlink(missing_ok=True)
@@ -602,6 +604,7 @@ def main():
         run()
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
+        print("::error::" + str(e).replace("\n", " ")[:400])
         try:
             report(status="error", error=friendly_error(e))
         finally:

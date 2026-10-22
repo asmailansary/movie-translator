@@ -44,12 +44,11 @@ jobs:
           VID: ${{ inputs.video_id }}
         run: |
           [[ "$VID" =~ ^[A-Za-z0-9_-]{11}$ ]] || exit 1
+          U="https://www.youtube.com/watch?v=$VID"
           for mode in direct warp; do
             P=""; [ "$mode" = warp ] && P="--proxy socks5://127.0.0.1:40000"
-            OUT=$(yt-dlp $P -f bestaudio --skip-download --print title "https://www.youtube.com/watch?v=$VID" 2>&1 | tail -2 | tr '\n' ' ' | cut -c1-250)
-            echo "::notice::[$mode] $OUT"
-            for c in tv_simply mweb android_vr; do
-              OUT=$(yt-dlp $P --extractor-args "youtube:player_client=$c" -f bestaudio --skip-download --print title "https://www.youtube.com/watch?v=$VID" 2>&1 | tail -1 | cut -c1-200)
-              echo "::notice::[$mode/$c] $OUT"
-            done
+            OUT=$(yt-dlp $P -f bestaudio -o "/tmp/$mode-full.%(ext)s" "$U" 2>&1 | grep -E "ERROR|WARNING|100%" | tail -2 | tr '\n' ' ' | cut -c1-300)
+            echo "::notice::[$mode full] $OUT | files: $(ls -la /tmp/$mode-full.* 2>/dev/null | awk '{print $5}' | tr '\n' ' ')"
+            OUT=$(yt-dlp $P -f bestaudio --download-sections "*0-600" -o "/tmp/$mode-sec.%(ext)s" "$U" 2>&1 | grep -E "ERROR|WARNING" | tail -2 | tr '\n' ' ' | cut -c1-300)
+            echo "::notice::[$mode section] $OUT | files: $(ls -la /tmp/$mode-sec.* 2>/dev/null | awk '{print $5}' | tr '\n' ' ')"
           done
