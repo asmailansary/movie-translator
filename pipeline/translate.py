@@ -107,6 +107,7 @@ def leaks(dialect, text):
 
 
 YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+MEDIA_ID_RE = re.compile(r"^(?:[A-Za-z0-9_-]{11}|tt_\d{6,25}|ig_[A-Za-z0-9_-]{5,40}|up_[A-Za-z0-9]{20})$")
 
 
 def extract_video_id(url: str):
@@ -621,8 +622,11 @@ def report(**payload):
 def validate_inputs():
     if not re.fullmatch(r"[a-f0-9]{12}", JOB_ID):
         sys.exit("JOB_ID غير صالح")
-    if not YT_ID_RE.match(VIDEO_ID):
+    # يوتيوب (١١ حرف)، تيك توك tt_، انستا ig_، ملف من الجوال up_ (نفس اللي يقبله Cloudflare)
+    if not MEDIA_ID_RE.match(VIDEO_ID):
         sys.exit("VIDEO_ID غير صالح")
+    if MEDIA_URL and not re.match(r"^https://", MEDIA_URL):
+        sys.exit("MEDIA_URL غير صالح")
     if SOURCE not in SOURCE_LANGS or DIALECT not in DIALECTS:
         sys.exit("اللغة أو اللهجة غير صحيحة")
     u = urlparse(CALLBACK)
@@ -846,7 +850,15 @@ def friendly_error(e):
 
 
 def main():
-    validate_inputs()
+    try:
+        validate_inputs()
+    except SystemExit as e:   # نعلم التطبيق بدل ما تعلق المهمة، ويطلع السبب في GitHub
+        print(f"::error::validate: {e}")
+        try:
+            report(status="error", error="صار خطأ في الطلب 🛠️ جرّب مرة ثانية")
+        except Exception:  # noqa: BLE001
+            pass
+        raise
     try:
         run()
     except Exception as e:  # noqa: BLE001
