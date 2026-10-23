@@ -170,10 +170,17 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None, url=None,
     else:
         routes = list(dict.fromkeys([os.environ.get("YTDLP_PROXY", "").strip(), ""]))
     last_err, info = None, {}
-    for proxy in routes:
+    # لو يوتيوب طلب «تأكد إنك مو روبوت»: نجرّب مشغّلات يوتيوب ثانية (التلفزيون، الجوال) اللي غالباً ما يطلبها
+    clients = [None, ["tv", "web_embedded"], ["mweb", "web_safari"]]
+    if "youtube.com" not in url and "youtu.be" not in url:
+        clients = [None]
+    attempts = [(px, cl) for cl in clients for px in routes]
+    for proxy, client in attempts:
         o = dict(opts)
         if proxy:
             o["proxy"] = proxy
+        if client:
+            o["extractor_args"] = {"youtube": {"player_client": client}}
         try:
             with yt_dlp.YoutubeDL(o) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -183,7 +190,7 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None, url=None,
                 if duration and duration > MAX_MINUTES * 60:
                     raise UserError(f"الفلم طويل مرة 😅 أطول من {MAX_MINUTES // 60} ساعات")
                 ydl.download([url])
-            print("✓ تم التحميل", stem, "عن طريق WARP" if proxy else "مباشرة")
+            print("✓ تم التحميل", stem, "عن طريق WARP" if proxy else "مباشرة", f"({','.join(client)})" if client else "")
             _ROUTE["proxy"] = proxy
             break
         except UserError:
@@ -191,7 +198,7 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None, url=None,
         except Exception as e:  # noqa: BLE001
             msg = str(e).replace("\n", " ")[:300]
             print("✗ فشل التحميل", "عن طريق WARP:" if proxy else "مباشرة:", msg)
-            print(f"::warning::download {'warp' if proxy else 'direct'} {stem}: {msg}")
+            print(f"::warning::download {'warp' if proxy else 'direct'}{'/' + client[0] if client else ''} {stem}: {msg}")
             last_err = e
             for p in workdir.glob(f"{stem}.*"):
                 p.unlink(missing_ok=True)

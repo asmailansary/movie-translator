@@ -382,14 +382,18 @@ async function ingest(request, env, id, ctx) {
   if ((watchable || job.status === "error") && !job.notified) {
     job.notified = true;
     await putJSON(env, jobKey(id), job);
-    const clip = job.kind === "clip";
+    const clip = job.kind === "clip", song = job.kind === "song";
     const T = (await getSettings(env)).texts;
-    const name = job.title ? `«${job.title.slice(0, 60)}»` : (clip ? "مقطعك" : "فلمك");
+    // نفس الكلام بس للأغنية: فلمك ← أغنيتك، الفلم ← الأغنية، جاهز ← جاهزة
+    const forSong = (t) => String(t || "").replace(/صار جاهز(?!ة)/g, "صارت جاهزة").replace(/فلمك/g, "أغنيتك").replace(/الفلم/g, "الأغنية").replace(/فلم/g, "أغنية").replace(/جاهز(?!ة)/g, "جاهزة");
+    const name = job.title ? `«${job.title.slice(0, 60)}»` : (clip ? "مقطعك" : song ? "أغنيتك" : "فلمك");
     const msg = job.status === "error"
-      ? { title: clip ? "صار شي بالمقطع 😕" : "صار شي بالفلم 😕", body: `${name} ما ضبط معنا، افتح الأداة وشوف وش السالفة`, url: `/?job=${id}` }
+      ? { title: clip ? "صار شي بالمقطع 😕" : song ? "صار شي بالأغنية 😕" : "صار شي بالفلم 😕", body: `${name} ما ضبط معنا، افتح الأداة وشوف وش السالفة`, url: `/?job=${id}` }
       : clip
         ? { title: T.push_clip_title, body: T.push_clip_body.replace("{name}", name), url: `/?job=${id}` }
-        : { title: T.push_ready_title, body: T.push_ready_body.replace("{name}", name), url: `/?job=${id}` };
+        : song
+          ? { title: forSong(T.push_ready_title), body: forSong(T.push_ready_body).replace("{name}", name), url: `/?job=${id}` }
+          : { title: T.push_ready_title, body: T.push_ready_body.replace("{name}", name), url: `/?job=${id}` };
     const origin = new URL(request.url).origin;
     ctx.waitUntil(notifyAll(env, msg, origin, job.owners || []).catch((e) => console.log("notify", e)));
   }
