@@ -226,7 +226,10 @@ async function createJob(request, env) {
   let media;
   if (body.upload) {   // ملف مرفوع من جوال المستخدم
     const up = /^up_[A-Za-z0-9]{20}$/.test(body.upload) ? await getJSON(env, uploadKey(body.upload)) : null;
-    if (!up || !up.done || up.dev !== dev) return json({ error: "الملف ما ارتفع كامل 🤔 ارفعه مرة ثانية" }, 400);
+    // ملف مرفوع: لصاحبه، أو لأي أحد وصله رمز مشاركة لنفس الملف
+    const shared = up && up.dev !== dev && /^[A-Z0-9]{6}$/.test(String(body.share || "")) ? await getJSON(env, `share/${body.share}.json`) : null;
+    if (!up || !up.done) return json({ error: "الملف ما ارتفع كامل 🤔 ارفعه مرة ثانية" }, 400);
+    if (up.dev !== dev && shared?.vid !== body.upload) return json({ error: "هذا الملف خاص 🔒 اطلب من صاحبه رمز مشاركة" }, 403);
     if (st.show_upload === false) return json({ error: "الرفع من الجوال موقف حالياً 🙏" }, 400);
     media = { vid: body.upload, platform: "upload", url: `upload:${body.upload}` };
   } else media = await parseMedia(body.url);
@@ -370,7 +373,7 @@ async function ingest(request, env, id, ctx) {
   if (Array.isArray(p.append)) {
     for (const s of p.append)
       if (typeof s.start === "number" && typeof s.end === "number")
-        job.segments.push({ start: s.start, end: s.end, src: String(s.src || ""), ar: String(s.ar || "") });
+        (job.segments ||= []).push({ start: s.start, end: s.end, src: String(s.src || ""), ar: String(s.ar || "") });
   }
   job.updated = Date.now();
   await putJSON(env, jobKey(id), job);
@@ -556,6 +559,41 @@ async function handoff(request, env, action) {
     return json({ device: h.dev, recent: h.recent || [] });
   }
   return json({ error: "غير موجود" }, 404);
+}
+
+// ───────── مشاركة الترجمة برمز ─────────
+// صاحب الترجمة يطلع رمز، واللي يلصقه يفتح نفس المحتوى بنفس اللهجة (الترجمة جاهزة، ما تُحسب عليه)
+async function shareCreate(request, env) {
+  const dev = deviceOf(request); if (!dev) return noDevice();
+  let b = {}; try { b = JSON.parse((await request.text()).slice(0, 3000) || "{}"); } catch {}
+  const vid = String(b.video_id || "");
+  if (!VID_RE.test(vid) || !(b.source in LANGS) || !(b.dialect in DIALECTS)) return json({ error: "ما نقدر نشارك هذا 🤔" }, 400);
+  const url = String(b.url || "");
+  const item = {
+    vid, source: b.source, dialect: b.dialect, kind: ["clip", "song"].includes(b.kind) ? b.kind : "movie",
+    platform: ["youtube", "tiktok", "instagram", "upload"].includes(b.platform) ? b.platform : "youtube",
+    url: /^(https:\/\/(www\.)?(youtube\.com|youtu\.be|tiktok\.com|instagram\.com)\/|upload:up_[A-Za-z0-9]{20}$)/.test(url) ? url.slice(0, 300) : (VID_RE.test(vid) && vid.length === 11 ? `https://youtu.be/${vid}` : ""),
+    title: String(b.title || "").slice(0, 200), by: dev, created: Date.now(),
+  };
+  // نفس المحتوى ونفس اللهجة من نفس الجهاز: نرجّع نفس الرمز
+  const mineKey = `shares/${dev}/${vid}__${item.source}__${item.dialect}`;
+  const old = await env.BUCKET.get(mineKey);
+  if (old) { const code = await old.text(); if (await env.BUCKET.head(`share/${code}.json`)) return json({ code }); }
+  let code = "";
+  for (let n = 0; n < 5 && !code; n++) {
+    const c = [...crypto.getRandomValues(new Uint8Array(6))].map((x) => CODE_CHARS[x % CODE_CHARS.length]).join("");
+    if (!(await env.BUCKET.head(`share/${c}.json`))) code = c;
+  }
+  if (!code) return json({ error: "جرّب مرة ثانية" }, 500);
+  await putJSON(env, `share/${code}.json`, item);
+  await env.BUCKET.put(mineKey, code);
+  return json({ code });
+}
+async function shareGet(env, code) {
+  const s = /^[A-Z0-9]{6}$/.test(code) ? await getJSON(env, `share/${code}.json`) : null;
+  if (!s) { await sleep(400); return json({ error: "الرمز غلط أو انحذف 🤔" }, 404); }
+  const { by, ...pub } = s;
+  return json(pub);
 }
 
 // ───────── رفع فلم أو حلقة أو أغنية من الجوال ─────────
@@ -785,6 +823,9 @@ export default {
       if (path === "/api/hello" && request.method === "POST") return hello(request, env);
       m = path.match(/^\/api\/handoff\/(create|claim)$/);
       if (m && request.method === "POST") return handoff(request, env, m[1]);
+      if (path === "/api/share/create" && request.method === "POST") return shareCreate(request, env);
+      m = path.match(/^\/api\/share\/([A-Za-z0-9]{6})$/);
+      if (m && request.method === "GET") return shareGet(env, m[1].toUpperCase());
       if (path === "/api/upload/start" && request.method === "POST") return uploadStart(request, env);
       m = path.match(/^\/api\/upload\/(up_[A-Za-z0-9]{20})\/(\d{1,3})$/);
       if (m && request.method === "PUT") return uploadPart(request, env, m[1], +m[2]);

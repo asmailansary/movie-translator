@@ -146,6 +146,7 @@ label.t{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
 input{width:100%;font:inherit;font-size:16px;color:var(--text);background:var(--surface2);
   border:1px solid var(--line);border-radius:12px;padding:12px 14px;outline:none}
 input:focus{border-color:var(--accent)}
+input.flash{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 30%,transparent);transition:box-shadow .3s}
 input[type=url]{direction:ltr;text-align:left}
 .row{display:grid;gap:12px;margin-top:12px}
 .seg{display:flex;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
@@ -316,6 +317,17 @@ body.cinema .not-cinema{display:none!important}
 .mv{display:flex;gap:8px;margin-top:8px}
 .mv input{font-size:13px;padding:9px 10px}
 .mv .btn2{flex:none;font-size:13px;padding:8px 12px}
+/* نافذة المشاركة */
+.smodal{position:fixed;inset:0;z-index:90;background:#0009;display:flex;align-items:flex-end;justify-content:center;padding:16px;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:fadeIn .25s ease both}
+.smodal .sbox{position:relative;width:min(460px,100%);background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:20px 18px calc(18px + env(safe-area-inset-bottom));
+  animation:rise .4s cubic-bezier(.22,1,.36,1) both}
+.smodal h3{margin:0 0 6px;font-size:18px}
+.smodal .sx{position:absolute;top:12px;left:12px;width:34px;height:34px;border-radius:50%;border:0;background:var(--surface2);color:var(--muted);font-size:20px}
+@keyframes fadeIn{from{opacity:0}}
+.sharein{display:flex;gap:8px;margin-top:14px}
+.sharein input{direction:ltr;text-align:center;letter-spacing:4px;font-weight:700;text-transform:uppercase}
+.sharein .btn2{flex:none}
 /* رفع من الجوال */
 .upbox{margin-top:14px}
 .upbtn{width:100%;display:flex;align-items:center;gap:12px;font:inherit;text-align:right;color:var(--text);background:var(--surface2);
@@ -484,7 +496,7 @@ body.watching .tabbar{display:none}
       <li>تأكد إن خيار <b>«فتح كتطبيق ويب»</b> شغّال ✅</li>
       <li>اضغط <b>«إضافة»</b> وافتحها من أيقونتها 🎉</li>
     </ol>
-    <p class="note">كذا تفتح بملء الشاشة مثل أي تطبيق، ويوصلك <b>إشعار 🔔</b> أول ما يجهز فلمك حتى لو طلعت منها.</p>
+    <p class="note">كذا تفتح بملء الشاشة مثل أي تطبيق، ويوصلك <b>إشعار 🔔</b> أول ما تجهز ترجمتك حتى لو طلعت منها.</p>
   </section>
 
   <!-- أيقونة جديدة -->
@@ -517,7 +529,7 @@ body.watching .tabbar{display:none}
   <!-- إرشاد: تفعيل الإشعارات -->
   <section class="home-only card tip hidden" data-pane="home" id="pushTip">
     <button class="x" type="button" data-close="pushTip" aria-label="إغلاق">×</button>
-    <h3>تبي نعلمك أول ما يجهز فلمك؟ 🔔</h3>
+    <h3>تبي نعلمك أول ما تجهز ترجمتك؟ 🔔</h3>
     <p class="note" style="margin:0 0 12px">فعّل التنبيهات، وتقدر تطلع من الأداة وتسوي أشغالك براحتك، وإذا جهز الفلم يوصلك إشعار 🍿</p>
     <button class="btn2" type="button" id="pushBtn">فعّل التنبيهات</button>
     <p class="note err hidden" id="pushErr"></p>
@@ -543,9 +555,11 @@ body.watching .tabbar{display:none}
         <small class="uppct" id="upPct"></small>
       </div>
     </div>
+    <label class="t" for="shareIn" style="margin-top:14px">عندك رمز مشاركة من أحد؟ 🎁</label>
+    <div class="sharein"><input id="shareIn" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABC123"><button class="btn2" type="button" id="shareOpen">افتح</button></div>
     <div class="row">
       <div>
-        <label class="t">لغة الفلم</label>
+        <label class="t">لغة المحتوى</label>
         <div class="chips" id="langs"></div>
       </div>
       <div>
@@ -591,6 +605,16 @@ body.watching .tabbar{display:none}
     <button type="button" data-hp="new" class="plus" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="6"/><path d="M12 8v8M8 12h8"/></svg>ترجم جديد</button>
     <button type="button" data-hp="saved" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7-4.3-8.8-8.5C1.9 8.3 3.8 5 7.1 5c2 0 3.4 1 4.2 2.3h1.4C13.5 6 14.9 5 16.9 5c3.3 0 5.2 3.3 3.9 6.5C19 15.7 12 20 12 20z"/></svg>المحفوظة</button>
   </nav>
+
+  <div class="smodal hidden" id="shareModal" role="dialog" aria-label="مشاركة الترجمة">
+    <div class="sbox">
+      <button type="button" class="sx" id="shareClose" aria-label="إغلاق">×</button>
+      <h3 id="shareTitle">شارك الترجمة 🎁</h3>
+      <p class="note" style="margin:0 0 6px" id="shareNote">أي أحد يلصق هالرمز في «ترجم جديد» يفتح له نفس المحتوى بنفس اللهجة، جاهز على طول.</p>
+      <div class="codebox"><span id="shareCode">······</span><button class="btn2" type="button" id="shareCopy">نسخ</button></div>
+      <button class="go" type="button" id="shareSend" style="margin-top:4px">أرسله 📤</button>
+    </div>
+  </div>
 
   <section id="watch" class="hidden">
     <div class="stage paused" id="stage">
@@ -668,6 +692,7 @@ body.watching .tabbar{display:none}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
         تحميل
       </a>
+      <button class="ibtn" id="shareBtn" type="button">مشاركة 🔗</button>
       <button class="ibtn" id="newBtn" type="button">فلم جديد</button>
     </div>
 
@@ -805,7 +830,8 @@ body.watching .tabbar{display:none}
   const CLIP_INTRO_DEFAULT = "نقدر فضولك تعرف وش ينقال ازهل الموضوع عندنا👨🏻‍🎨";
   // نفس الكلام بس للمقاطع: «المقطع» بدل «الفلم»
   const word = t => (job?.kind === "clip" ? String(t).replace(/فلمك/g, "مقطعك").replace(/الفلم/g, "المقطع").replace(/فلم /g, "مقطع ")
-    : job?.kind === "song" ? String(t).replace(/فلمك/g, "أغنيتك").replace(/الفلم/g, "الأغنية").replace(/فلم /g, "أغنية ") : t);
+    : job?.kind === "song" ? String(t).replace(/فلمك/g, "أغنيتك").replace(/الفلم/g, "الأغنية").replace(/فلم /g, "أغنية ")
+        .replace(/ترجمته/g, "ترجمتها").replace(/جاهز(?!ة)/g, "جاهزة").replace(/🎬/g, "🎵") : t);
 
   // ───── البداية
   if (standalone && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -873,7 +899,7 @@ body.watching .tabbar{display:none}
     const btn = $("#goBtn"); btn.disabled = true; btn.textContent = "لحظة… ⏳";
     try {
       const up = String(url || "").startsWith("upload:") ? String(url).slice(7) : "";
-      const r = await api("/api/jobs", { method: "POST", body: JSON.stringify(up ? { upload: up, title: upTitle, source: src, dialect: dia, kind } : { url, source: src, dialect: dia, kind }) });
+      const r = await api("/api/jobs", { method: "POST", body: JSON.stringify(up ? { upload: up, title: upTitle || shareTitle, share: shareCode, source: src, dialect: dia, kind } : { url, source: src, dialect: dia, kind }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(friendly(r.status, d.error));
       lang = src; dialect = dia; renderChips();
@@ -882,6 +908,50 @@ body.watching .tabbar{display:none}
     } catch (err) { showErr(err.message); window.scrollTo({ top: 0, behavior: "smooth" }); }
     finally { btn.disabled = Boolean(S.maintenance); btn.textContent = T("go_btn", "ترجم وشغّل 🎬"); }
   }
+  // ───── مشاركة الترجمة برمز
+  let shareCode = "", shareTitle = "";
+  $("#shareBtn").onclick = async () => {
+    if (!job) return;
+    const btn = $("#shareBtn"); btn.disabled = true;
+    try {
+      const r = await api("/api/share/create", { method: "POST", body: JSON.stringify({ video_id: job.vid, source: lang, dialect, kind: job.kind, platform: job.platform, url: job.url, title }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || "ما قدرنا نطلع رمز");
+      const what = kindName(job.kind);
+      $("#shareCode").textContent = d.code;
+      $("#shareTitle").textContent = job.kind === "song" ? "شارك الأغنية المترجمة 🎁" : `شارك ${job.kind === "clip" ? "المقطع" : "الفلم"} المترجم 🎁`;
+      $("#shareNote").textContent = `أي أحد يلصق هالرمز في «ترجم جديد» يفتح له ${job.kind === "song" ? "نفس الأغنية" : "نفس ال" + what} باللهجة ${dName(dialect) || ""}، جاهز على طول.`;
+      $("#shareModal").classList.remove("hidden");
+    } catch (e) { toast(e.message); } finally { btn.disabled = false; }
+  };
+  const shareText = () => {
+    const code = $("#shareCode").textContent, name = cleanTitle(title).name;
+    return `${name ? "«" + name + "» " : ""}مترجم ${dName(dialect) ? "باللهجة " + dName(dialect) : ""} على فهّمني 🍿\nالصق الرمز ${code} في «ترجم جديد» أو افتح الرابط:\n${location.origin}/?share=${code}`;
+  };
+  $("#shareCopy").onclick = async () => {
+    try { await navigator.clipboard.writeText($("#shareCode").textContent); toast("انسخ الرمز ✓"); } catch { toast("ما قدرنا ننسخ، انسخه يدوي 🙏"); }
+  };
+  $("#shareSend").onclick = async () => {
+    const text = shareText();
+    if (navigator.share) { try { await navigator.share({ text }); } catch {} return; }
+    try { await navigator.clipboard.writeText(text); toast("انسخ الرابط مع الرمز ✓ الصقه لصاحبك"); } catch {}
+  };
+  $("#shareClose").onclick = () => $("#shareModal").classList.add("hidden");
+  $("#shareModal").addEventListener("click", e => { if (e.target.id === "shareModal") $("#shareModal").classList.add("hidden"); });
+  async function openShare(code) {
+    code = String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (code.length !== 6) return showErr("الرمز ٦ حروف أو أرقام 🤔");
+    try {
+      const r = await api(`/api/share/${code}`); const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "الرمز غلط");
+      shareCode = code; shareTitle = d.title || "";
+      await start(d.url || "https://youtu.be/" + d.vid, d.source, d.dialect, 0, d.kind || "movie");
+      $("#shareIn").value = "";
+    } catch (e) { showErr(e.message); }
+    finally { shareCode = ""; shareTitle = ""; }
+  }
+  $("#shareOpen").onclick = () => openShare($("#shareIn").value);
+  $("#shareIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); openShare($("#shareIn").value); } });
+
   // ───── رفع ملف من الجوال (قطع قطع عشان الملفات الكبيرة)
   let upFile = null, upKind = "movie", upTitle = "", uploading = false;
   const localFiles = {};
@@ -1018,6 +1088,7 @@ body.watching .tabbar{display:none}
     openerDone = false; prepOpener();
     loadVideo(vid, resumeAt); poll(); updateHint();
     document.title = kind === "clip" ? "فهّمني · مقطع 📱" : kind === "song" ? "فهّمني · أغنية 🎵" : "فهّمني · فلم 🎬";
+    $("#newBtn").textContent = kind === "clip" ? "مقطع جديد" : kind === "song" ? "أغنية جديدة" : "فلم جديد";
     showWatch(true);
     upsertRecent({ position: resumeAt || 0, done: false });
     window.scrollTo({ top: 0 });
@@ -1026,6 +1097,8 @@ body.watching .tabbar{display:none}
 
   // من رابط الإشعار
   async function openFromUrl(url) {
+    const sc = new URL(url || location.href).searchParams.get("share");
+    if (sc && /^[A-Za-z0-9]{6}$/.test(sc)) { history.replaceState(null, "", "/"); return openShare(sc); }
     const q = new URL(url || location.href).searchParams.get("job");
     if (!q || !/^[a-f0-9]{12}$/.test(q)) return;
     try {
@@ -1584,7 +1657,7 @@ body.watching .tabbar{display:none}
       const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.setAttribute("aria-label", "حذف");
       del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
       del.onclick = async () => {
-        if (!confirm(`تحذف «${f.title || "الفلم"}» من المحفوظة؟`)) return;
+        if (!confirm(`تحذف «${f.title || ({ clip: "المقطع", song: "الأغنية" }[f.kind] || "الفلم")}» من المحفوظة؟`)) return;
         const r = await api(`/api/favorites/${f.key}`, { method: "DELETE" });
         if (r.ok) { favs = favs.filter(x => x.key !== f.key); renderFavs(); }
       };
@@ -1739,7 +1812,8 @@ body.watching .tabbar{display:none}
       p.querySelector("img").src = "/brand/icon-192.png?v=" + (S.icon_v || 0);
       p.querySelector("b").textContent = S.name || "فهّمني";
       p.querySelector("small").textContent = S.tagline || "أي فلم أو مقطع… نفهّمك إياه بلهجتك 🍿";
-      p.querySelector(".hplay").textContent = "ترجم أول فلم 🎬"; p.querySelector(".hplay").onclick = () => setHP("new");
+      const first = { clip: "ترجم أول مقطع 📱", song: "ترجم أول أغنية 🎵", movie: "ترجم أول فلم 🎬" }[homeFilter] || "ترجم أول فلم 🎬";
+      p.querySelector(".hplay").textContent = first; p.querySelector(".hplay").onclick = () => goNew(homeFilter);
       return;
     }
     const src = thumbOf(it);
@@ -1764,10 +1838,16 @@ body.watching .tabbar{display:none}
     if (it.duration && it.position > 5) { const hb = document.createElement("div"); hb.className = "hbar"; const hi = document.createElement("i"); hi.style.width = Math.min(100, it.position / it.duration * 100) + "%"; hb.append(hi); info.append(hb); }
     const play = document.createElement("button"); play.type = "button"; play.className = "hplay";
     play.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.8v14.4a1 1 0 0 0 1.5.86l11.6-7.2a1 1 0 0 0 0-1.72L8.5 3.94A1 1 0 0 0 7 4.8z"/></svg><span></span>';
-    play.querySelector("span").textContent = it.position > 5 ? "كمّل المشاهدة" : "شغّل";
+    play.querySelector("span").textContent = it.position > 5 ? ({ song: "كمّل الأغنية", clip: "كمّل المقطع" }[it.kind] || "كمّل المشاهدة") : "شغّل";
     play.onclick = () => openItem(it);
-    const sec = document.createElement("button"); sec.type = "button"; sec.className = "hsec"; sec.textContent = "＋ ترجم فلم جديد"; sec.onclick = () => setHP("new");
+    const sec = document.createElement("button"); sec.type = "button"; sec.className = "hsec"; sec.textContent = { song: "＋ ترجم أغنية جديدة", clip: "＋ ترجم مقطع جديد", movie: "＋ ترجم فلم جديد" }[homeFilter] || "＋ ترجم شي جديد"; sec.onclick = () => goNew(homeFilter);
     info.append(play, sec); p.append(info);
+  }
+  // «ترجم جديد» من قسم معيّن: يفتح الخانة اللي تناسبه
+  function goNew(kind) {
+    setHP("new");
+    const field = { clip: "#clipUrl", song: "#songUrl" }[kind] || "#url";
+    setTimeout(() => { const el = $(field); if (el && !el.classList.contains("hidden")) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200); } }, 450);
   }
   function openItem(it) {
     if (it.from === "fav") start(it.url || "https://youtu.be/" + it.video_id, it.source, it.dialect, it.position, it.kind || "movie");
