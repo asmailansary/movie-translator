@@ -402,6 +402,11 @@ html[data-theme=light] .amb{opacity:0!important}
 .tile .tb{position:absolute;top:7px;right:7px;font-size:11px;font-weight:700;background:#000a;border-radius:999px;padding:3px 8px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .tile .tp{position:absolute;inset:auto 0 0 0;height:3px;background:#fff3}
 .tile .tp i{display:block;height:100%;background:var(--accent)}
+.tile .tpct{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-weight:700;font-size:20px;color:#fff;text-shadow:0 2px 10px #000;
+  background:#0006;border-radius:999px;padding:4px 12px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.tile.pending img,.tile.pending video{filter:saturate(.6) brightness(.7)}
+.tile.pending .tp i{background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 50%,#fff));animation:pbar 1.6s ease-in-out infinite alternate}
+@keyframes pbar{from{opacity:.65}to{opacity:1}}
 .tile .tx{position:absolute;top:5px;left:5px;width:28px;height:28px;border-radius:50%;background:#000a;color:#fff;display:grid;place-items:center;font-size:16px;line-height:1}
 .tile .ph{position:absolute;inset:0;display:grid;place-items:center;font-size:30px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 30%,var(--surface2)),var(--surface2))}
 
@@ -481,6 +486,7 @@ body.watching .tabbar{display:none}
     <button type="button" data-go="saved" aria-pressed="false">المحفوظة ❤️</button>
   </nav>
   <section class="home-only hero" data-pane="home" id="hero"></section>
+  <section class="home-only rowsec hidden" data-pane="home" id="rowPending"><h2 id="pendingTitle">يتم ترجمتها الحين ⏳</h2><div class="strip" id="stripPending"></div></section>
   <section class="home-only rowsec hidden" data-pane="home" id="rowRecent"><h2>كمّل المشاهدة</h2><div class="strip" id="stripRecent"></div></section>
   <section class="home-only rowsec hidden" data-pane="home" id="rowFavs"><h2>المحفوظة ❤️</h2><div class="strip" id="stripFavs"></div></section>
   <section class="home-only rowsec hidden" data-pane="home" id="rowSongs"><h2>أغاني فهمتها 🎵</h2><div class="strip" id="stripSongs"></div></section>
@@ -1692,7 +1698,7 @@ body.watching .tabbar{display:none}
     store.set("recent2", list.slice(0, 12));
   }
   function renderRecent() {
-    try { renderHome(); fillTitles(); } catch (e) { console.warn(e); }
+    try { renderHome(); fillTitles(); refreshPending(); } catch (e) { console.warn(e); }
     const list = store.get("recent2", []), box = $("#recentList");
     box.innerHTML = "";
     $("#recentBox").classList.toggle("hidden", !list.length);
@@ -1798,6 +1804,8 @@ body.watching .tabbar{display:none}
   }
   function heroItem() {
     const rec = store.get("recent2", []).filter(r => homeFilter === "all" || (r.kind || "movie") === homeFilter);
+    const ready = rec.find(r => r.done !== false);   // البطاقة الكبيرة لشي جاهز تتفرجه
+    if (ready) return { ...ready, from: "recent" };
     if (rec.length) return { ...rec[0], from: "recent" };
     const f = favs.find(f => homeFilter === "all" || (f.kind || "movie") === homeFilter);
     return f ? { ...f, vid: f.video_id, from: "fav" } : null;
@@ -1865,7 +1873,12 @@ body.watching .tabbar{display:none}
     const tt = document.createElement("div"); tt.className = "tt" + (name && isLat(name) ? " lat" : "");
     tt.textContent = name || (it.done === false ? "يتجهز… ⏳" : kindName(it.kind)); b.append(tt);
     if (it.dialect) { const tb = document.createElement("span"); tb.className = "tb"; tb.textContent = dName(it.dialect); b.append(tb); }
-    if (it.duration && it.position > 5) { const tp = document.createElement("div"); tp.className = "tp"; const ti = document.createElement("i"); ti.style.width = Math.min(100, it.position / it.duration * 100) + "%"; tp.append(ti); b.append(tp); }
+    if (opts.pending) {
+      b.classList.add("pending");
+      const pc = Math.max(1, Math.min(99, Math.round((it.progress || 0) * 100)));
+      const t2 = document.createElement("span"); t2.className = "tpct"; t2.textContent = it.failed ? "😕" : pc + "٪"; b.append(t2);
+      const tp = document.createElement("div"); tp.className = "tp"; const ti = document.createElement("i"); ti.style.width = pc + "%"; tp.append(ti); b.append(tp);
+    } else if (it.duration && it.position > 5) { const tp = document.createElement("div"); tp.className = "tp"; const ti = document.createElement("i"); ti.style.width = Math.min(100, it.position / it.duration * 100) + "%"; tp.append(ti); b.append(tp); }
     if (opts.onDel) { const x = document.createElement("span"); x.className = "tx"; x.textContent = "×"; x.setAttribute("role", "button"); x.setAttribute("aria-label", "شيل");
       x.onclick = e => { e.stopPropagation(); opts.onDel(); }; b.append(x); }
     b.onclick = () => openItem(it);
@@ -1873,12 +1886,17 @@ body.watching .tabbar{display:none}
   }
   function renderHome() {
     const want = it => homeFilter === "all" || (it.kind || "movie") === homeFilter;
-    const rec = store.get("recent2", []).map(r => ({ ...r, from: "recent" }));
+    const all = store.get("recent2", []).map(r => ({ ...r, from: "recent" }));
+    const rec = all.filter(r => r.done !== false);                 // جاهزة: تروح لصفوف «فهمتها»
+    const pend = all.filter(r => r.done === false && want(r));     // لسه تتترجم
     const fav = favs.map(f => ({ ...f, vid: f.video_id, from: "fav" }));
+    $("#pendingTitle").textContent = { movie: "أفلام يتم ترجمتها ⏳", clip: "مقاطع يتم ترجمتها ⏳", song: "أغاني يتم ترجمتها ⏳" }[homeFilter] || "يتم ترجمتها الحين ⏳";
     const fill = (rowId, stripId, list, opts) => {
       const st = $(stripId); st.innerHTML = ""; list.forEach(it => st.append(tile(it, opts(it))));
       $(rowId).classList.toggle("hidden", !list.length);
     };
+    fill("#rowPending", "#stripPending", pend, it => ({ pending: true, tall: it.kind === "clip",
+      onDel: () => { store.set("recent2", store.get("recent2", []).filter(x => x.vid !== it.vid)); renderRecent(); } }));
     fill("#rowRecent", "#stripRecent", rec.filter(r => want(r) && (r.kind || "movie") === "movie"), it => ({
       onDel: () => { store.set("recent2", store.get("recent2", []).filter(x => x.vid !== it.vid)); renderRecent(); } }));
     fill("#rowFavs", "#stripFavs", fav.filter(want), it => ({ tall: it.kind === "clip" }));
@@ -1888,6 +1906,30 @@ body.watching .tabbar{display:none}
       onDel: () => { store.set("recent2", store.get("recent2", []).filter(x => x.vid !== it.vid)); renderRecent(); } }));
     renderHero();
   }
+  // اللي تحت الترجمة: نسأل عن تقدمها، وأول ما تخلص تنتقل لصف «فهمتها»
+  let pendTimer = 0;
+  async function refreshPending() {
+    clearTimeout(pendTimer);
+    const list = store.get("recent2", []).filter(r => r.done === false && r.job_id).slice(0, 8);
+    if (!list.length) return;
+    let changed = false;
+    await Promise.all(list.map(async r => {
+      try {
+        const res = await api(`/api/jobs/${r.job_id}?since=999999`); if (!res.ok) return;
+        const d = await res.json();
+        const l2 = store.get("recent2", []); const x = l2.find(y => y.vid === r.vid); if (!x) return;
+        const before = JSON.stringify([x.done, x.progress, x.title, x.failed]);
+        if (d.status === "done") Object.assign(x, { done: true, duration: d.duration || x.duration });
+        x.progress = d.progress || x.progress || 0; x.failed = d.status === "error";
+        if (d.title && !x.title) x.title = d.title;
+        if (JSON.stringify([x.done, x.progress, x.title, x.failed]) !== before) { store.set("recent2", l2); changed = true; }
+      } catch {}
+    }));
+    if (changed && !document.body.classList.contains("watching")) renderHome();
+    if (!document.hidden) pendTimer = setTimeout(refreshPending, 15000);
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !document.body.classList.contains("watching")) refreshPending(); });
+
   // أسماء ناقصة؟ نجيبها من يوتيوب مرة وحدة وتنحفظ
   const metaAsked = new Set();
   async function fillTitles() {
