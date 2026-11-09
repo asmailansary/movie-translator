@@ -155,7 +155,11 @@ def download_audio(vid, workdir: Path, stem="audio", section_end=None, url=None,
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "retries": 3,
+        "retries": 2,
+        "fragment_retries": 3,
+        "extractor_retries": 1,
+        # لو الاتصال علّق (خصوصاً عن طريق WARP) ما ننتظر للأبد: بعد ٢٥ ثانية بدون رد ننتقل للطريق اللي بعده
+        "socket_timeout": 25,
         "concurrent_fragment_downloads": 4,
     }
     if section_end:
